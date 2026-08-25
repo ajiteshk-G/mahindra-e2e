@@ -4,11 +4,15 @@ node_modules/
 venv/
 env/
 
-# Next.js Build
+# Next.js Build & Cache
 .next/
 out/
 build/
 dist/
+next_build/
+*.tsbuildinfo
+.turbo/
+.cache/
 
 # Python Cache
 __pycache__/
@@ -17,6 +21,8 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+.uv/
+.ruff_cache/
 
 # Local Databases & Logs
 *.db

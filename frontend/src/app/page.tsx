@@ -9,7 +9,9 @@ import { FinancingDocUpload } from "@/components/FinancingDocUpload";
 import { TelematicsWidget } from "@/components/TelematicsWidget";
 import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
 import { CustomerLeadModal } from "@/components/CustomerLeadModal";
+import { ChatAvatarPanel } from "@/components/ChatAvatarPanel";
 import { useCustomerProfile } from "@/hooks/useCustomerProfile";
+import { useLiveVoice } from "@/hooks/useLiveVoice";
 import { fetchCatalog, fetchDealerships, fetchLiveTelematics } from "@/lib/api";
 import { DEFAULT_VEHICLES } from "@/lib/defaultCatalog";
 import {
@@ -36,6 +38,45 @@ export default function Home() {
   const [testRideInsights, setTestRideInsights] = useState<TestRideInsightResponse | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isGlobalLeadModalOpen, setIsGlobalLeadModalOpen] = useState(false);
+
+  // Global Chat modal state
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
+  const normalizeToVehicleId = (key: string): string => {
+    const k = key.toLowerCase().replace(/[\s-_]+/g, "_");
+    if (k.includes("thar_roxx") || (k.includes("thar") && k.includes("roxx")) || k.includes("roxx")) return "thar_roxx";
+    if (k.includes("thar_3door") || k.includes("thar_3_door") || k === "thar") return "thar_3door";
+    if (k.includes("scorpio_n") || k.includes("scorpion") || k.includes("big_daddy")) return "scorpio_n";
+    if (k.includes("scorpio_classic") || k.includes("classic")) return "scorpio_classic";
+    if (k.includes("xuv700") || k.includes("xuv_700")) return "xuv700";
+    if (k.includes("xuv_3xo") || k.includes("3xo") || k.includes("xuv3xo") || k.includes("skyroof")) return "xuv_3xo";
+    if (k.includes("be_6e") || k.includes("be6e") || k.includes("be_6")) return "be_6e";
+    if (k.includes("xev_9e") || k.includes("xev9e") || k.includes("xev_9")) return "xev_9e";
+    if (k.includes("xuv400") || k.includes("xuv400_ev")) return "xuv400_ev";
+    if (k.includes("bolero_neo_plus") || k.includes("neo_plus") || k.includes("neo+")) return "bolero_neo_plus";
+    if (k.includes("bolero_neo") || k.includes("neo")) return "bolero_neo";
+    if (k.includes("bolero")) return "bolero";
+    if (k.includes("marazzo")) return "marazzo";
+    return k;
+  };
+
+  // Live Voice UI Actions Handler
+  const handleUiEvent = (event: any) => {
+    const toolName = event.tool_name || event.toolCall || "";
+    const args = event.tool_args || event.args || {};
+    const rawCar = args.car_name || args.vehicle_id || args.model_of_interest || args.model_name || "";
+
+    if (toolName === "show_vehicle_spotlight" || toolName === "switch_vehicle_showroom" || rawCar) {
+      const normId = normalizeToVehicleId(rawCar || selectedVehicleId);
+      const matched = vehicles.find((v) => v.id === normId || v.name.toLowerCase().includes(rawCar.toLowerCase()));
+      if (matched) {
+        setSelectedVehicleId(matched.id);
+        setActiveStage("presales");
+      }
+    }
+  };
+
+  const liveVoice = useLiveVoice(handleUiEvent);
 
   useEffect(() => {
     async function loadData() {
@@ -78,13 +119,11 @@ export default function Home() {
     setActiveStage("presales");
   };
 
-  const handleHeaderOpenAvatar = () => {
-    setActiveStage("presales");
-    const chatInput = document.querySelector('input[placeholder*="Ask Kabir"]') as HTMLInputElement;
-    if (chatInput) {
-      chatInput.focus();
-      chatInput.scrollIntoView({ behavior: "smooth", block: "center" });
+  const handleOpenChat = (targetVehicle?: VehicleItem) => {
+    if (targetVehicle) {
+      setSelectedVehicleId(targetVehicle.id);
     }
+    setIsChatOpen(true);
   };
 
   const currentVehicle = vehicles.find((v) => v.id === selectedVehicleId) || vehicles[0];
@@ -104,16 +143,21 @@ export default function Home() {
           }
         }}
         onOpenLeadModal={() => setIsGlobalLeadModalOpen(true)}
-        onOpenAvatar={handleHeaderOpenAvatar}
+        onOpenAvatar={() => handleOpenChat(currentVehicle)}
       />
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 w-full flex-1">
-        {/* Stage 1: Pre-Sales Car Website & Virtual Showroom (Split layout with embedded right Chat & Avatar panel) */}
+        {/* Stage 1: Pre-Sales Car Website & Virtual Showroom */}
         {activeStage === "presales" && (
           <PreSalesShowroom
             vehicles={vehicles}
             currentProfile={profile}
+            selectedVehicleId={selectedVehicleId}
+            onSelectVehicleId={setSelectedVehicleId}
+            onOpenChat={handleOpenChat}
+            isChatOpen={isChatOpen}
+            onSendChatMessage={liveVoice.sendTextMessage}
             onProfileUpdated={() => {
               if (profile?.phone) loadProfile(profile.phone);
             }}
@@ -184,6 +228,66 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {/* Global Floating Chat & Avatar Panel (No backdrop blur - main window remains fully visible & interactive) */}
+      {isChatOpen && (
+        <div
+          className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 w-full sm:w-[440px] md:w-[460px] max-w-[calc(100vw-32px)] h-[88vh] max-h-[760px] flex flex-col pointer-events-auto shadow-2xl animate-in slide-in-from-bottom-6 sm:slide-in-from-right-6 duration-300"
+          role="region"
+          aria-label="Kabir AI Virtual Showroom Specialist"
+        >
+          <ChatAvatarPanel
+            isRecording={liveVoice.isRecording}
+            rmsLevel={liveVoice.rmsLevel}
+            messages={liveVoice.messages}
+            activeLanguage={liveVoice.activeLanguage}
+            onToggleRecording={(custName) => {
+              if (liveVoice.isRecording) {
+                liveVoice.stopVoiceRecording();
+              } else {
+                liveVoice.startVoiceRecording(custName || profile?.name);
+              }
+            }}
+            onSendMessage={liveVoice.sendTextMessage}
+            onSwitchLanguage={liveVoice.switchLanguage}
+            onClose={() => {
+              if (liveVoice.isRecording) liveVoice.stopVoiceRecording();
+              setIsChatOpen(false);
+            }}
+            initialCustomerName={profile?.name}
+            initialCustomerPhone={profile?.phone}
+          />
+        </div>
+      )}
+
+      {/* Global Floating "Talk to Kabir" Button (Always accessible when chat closed) */}
+      {!isChatOpen && (
+        <div className="fixed bottom-6 right-6 z-40 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <button
+            onClick={() => handleOpenChat(currentVehicle)}
+            className="flex items-center gap-3 px-4 py-3 rounded-full bg-[#0B0F17] hover:bg-[#151D2C] border-2 border-red-500/70 shadow-[0_8px_30px_rgba(227,24,55,0.35)] text-white font-black text-xs transition-all hover:scale-105 group active:scale-95 cursor-pointer"
+            title="Talk to Kabir AI Showroom Specialist (Gemini Live)"
+          >
+            <div className="relative w-9 h-9 rounded-full overflow-hidden border border-red-400 bg-slate-800 shrink-0">
+              <img
+                src="/avatars/jay.png"
+                alt="Kabir Avatar"
+                className="w-full h-full object-cover object-[50%_15%] group-hover:scale-110 transition-transform duration-300"
+              />
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-slate-900 animate-pulse"></span>
+            </div>
+            <div className="text-left">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black tracking-tight text-white">Talk to Kabir</span>
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-red-600/30 text-red-300 font-mono border border-red-500/40 uppercase font-bold">
+                  Live
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-300 font-medium">Mahindra AI Specialist</p>
+            </div>
+          </button>
+        </div>
+      )}
 
       {/* Global Lead Identify Modal */}
       <CustomerLeadModal

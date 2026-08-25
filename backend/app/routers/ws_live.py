@@ -44,36 +44,6 @@ class LiveChatResponse(BaseModel):
     tool_args: Optional[Dict[str, Any]] = None
     language: str
 
-class TTSRequest(BaseModel):
-    text: str
-    language: Optional[str] = "hi"
-
-@router.post("/api/tts")
-async def generate_tts(req: TTSRequest):
-    """Generates natural human spoken speech MP3 for Kabir/Jay."""
-    import urllib.request
-    import urllib.parse
-    from fastapi.responses import Response
-
-    clean_text = req.text.replace("*", "").replace("#", "").replace("`", "")
-    lang = req.language or "hi"
-    if lang.lower() in ["english", "en", "en-in"]:
-        lang = "en-IN"
-    elif lang.lower() in ["hindi", "hinglish", "hi-in"]:
-        lang = "hi"
-    else:
-        lang = "hi"
-
-    try:
-        url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={urllib.parse.quote(clean_text[:400])}&tl={lang}&client=tw-ob"
-        req_obj = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req_obj) as resp:
-            audio_data = resp.read()
-            return Response(content=audio_data, media_type="audio/mpeg")
-    except Exception as e:
-        logger.error(f"TTS fetch error: {e}")
-        return Response(status_code=500, content=b"")
-
 @router.post("/api/live/chat", response_model=LiveChatResponse)
 async def post_live_chat(req: LiveChatRequest):
     """HTTP REST fallback for web proxy environments where direct WebSocket ports are blocked."""
@@ -129,6 +99,32 @@ async def post_live_chat(req: LiveChatRequest):
         language=result.get("language", "Hinglish")
     )
 
+_CACHED_TOKEN: Optional[str] = None
+_TOKEN_EXPIRY: float = 0.0
+
+async def get_bearer_token():
+    global _CACHED_TOKEN, _TOKEN_EXPIRY
+    import time
+    now = time.time()
+    if _CACHED_TOKEN and now < _TOKEN_EXPIRY:
+        return _CACHED_TOKEN, settings.VERTEX_PROJECT_ID
+
+    def _fetch_token():
+        try:
+            creds, project_id = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+            auth_req = google.auth.transport.requests.Request()
+            creds.refresh(auth_req)
+            return creds.token, settings.VERTEX_PROJECT_ID or project_id or "mb-poc-352009"
+        except Exception as e:
+            logger.warning(f"Could not refresh GCP OAuth token: {e}")
+            return None, settings.VERTEX_PROJECT_ID
+
+    token, proj = await asyncio.to_thread(_fetch_token)
+    if token:
+        _CACHED_TOKEN = token
+        _TOKEN_EXPIRY = now + 1800
+    return token, proj
+
 @router.websocket("/ws/live-audio")
 async def live_audio_websocket(websocket: WebSocket):
     """
@@ -146,24 +142,9 @@ async def live_audio_websocket(websocket: WebSocket):
         if not customer:
             customer = await CustomerService.get_or_create_default_customer(db)
 
-    # 1. Obtain Google Default OAuth Token
-    try:
-        creds, project_id = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-        auth_req = google.auth.transport.requests.Request()
-        creds.refresh(auth_req)
-        bearer_token = creds.token
-        used_project = settings.VERTEX_PROJECT_ID or project_id or "mb-poc-352009"
-    except Exception as e:
-        logger.warning(f"Could not refresh GCP OAuth token: {e}")
-        bearer_token = None
-        used_project = settings.VERTEX_PROJECT_ID
-
-    host = f"{settings.VERTEX_LOCATION}-aiplatform.googleapis.com"
-    service_url = SERVICE_URL.format(host=host)
-
     session_mgr = get_or_create_session(session_id=session_id, customer_id=customer.customer_id)
 
-    # Handshake to client
+    # 1. Immediate handshake to client
     await websocket.send_text(json.dumps({
         "type": "SESSION_INITIALIZED",
         "session_id": session_id,
@@ -172,7 +153,13 @@ async def live_audio_websocket(websocket: WebSocket):
         "greeting": f"Namaste {customer.name}! Main Kabir, Mahindra Auto se. Main aapki {customer.interested_vehicle_id.replace('_', ' ').title()} me madad kar sakta hoon."
     }))
 
-    # 2. If token is available, establish live Bidi WebSocket to Vertex AI
+    # 2. Obtain token asynchronously without blocking event loop
+    bearer_token, used_project = await get_bearer_token()
+
+    host = f"{settings.VERTEX_LOCATION}-aiplatform.googleapis.com"
+    service_url = SERVICE_URL.format(host=host)
+
+    # 3. If token is available, establish live Bidi WebSocket to Vertex AI
     if bearer_token:
         headers = {
             "Content-Type": "application/json",
@@ -186,10 +173,10 @@ async def live_audio_websocket(websocket: WebSocket):
                 additional_headers=headers,
                 ssl=ssl_context,
                 ping_interval=None,
+                open_timeout=4.0
             ) as bidi_ws:
                 logger.info(f"Connected to Vertex Bidi service for session {session_id}")
 
-                # Send initial setup config according to user_guide.txt (Gemini 3.1 Live API / Live Avatar)
                 setup_msg = {
                     "setup": {
                         "model": f"projects/{used_project}/locations/{settings.VERTEX_LOCATION}/publishers/google/models/{settings.GEMINI_LIVE_MODEL}",
@@ -209,6 +196,49 @@ async def live_audio_websocket(websocket: WebSocket):
                         "avatarConfig": {
                             "avatarName": "Jay"
                         },
+                        "tools": [
+                            {
+                                "functionDeclarations": [
+                                    {
+                                        "name": "switch_vehicle_showroom",
+                                        "description": "Call this tool to switch the showroom backdrop, hero stage, and vehicle carousel whenever the customer asks about, compares, or mentions any Mahindra SUV or vehicle model (e.g. thar_roxx, scorpio_n, xuv700, be_6e, xev_9e, xuv_3xo, thar_3door, scorpio_classic, bolero_neo, bolero_neo_plus, bolero, xuv400_ev, marazzo).",
+                                        "parameters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "car_name": {
+                                                    "type": "string",
+                                                    "description": "The normalized ID: thar_roxx, scorpio_n, xuv700, be_6e, xev_9e, xuv_3xo, thar_3door, scorpio_classic, bolero_neo, bolero_neo_plus, bolero, xuv400_ev, marazzo"
+                                                }
+                                            },
+                                            "required": ["car_name"]
+                                        }
+                                    },
+                                    {
+                                        "name": "compare_vehicles",
+                                        "description": "Call this tool when customer wants to compare vehicles.",
+                                        "parameters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "vehicle_id_1": {"type": "string"},
+                                                "vehicle_id_2": {"type": "string"}
+                                            },
+                                            "required": ["vehicle_id_1", "vehicle_id_2"]
+                                        }
+                                    },
+                                    {
+                                        "name": "book_test_drive",
+                                        "description": "Call this tool when customer wants to book a test drive.",
+                                        "parameters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "model_name": {"type": "string"}
+                                            },
+                                            "required": ["model_name"]
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
                         "systemInstruction": {
                             "parts": [{"text": KABIR_SYSTEM_PROMPT}]
                         }
@@ -216,15 +246,39 @@ async def live_audio_websocket(websocket: WebSocket):
                 }
                 await bidi_ws.send(json.dumps(setup_msg))
 
+                # Wait for Vertex setup confirmation
+                try:
+                    init_resp = await asyncio.wait_for(bidi_ws.recv(), timeout=4.0)
+                    init_data = json.loads(init_resp) if isinstance(init_resp, str) else {}
+                    logger.info(f"Vertex Bidi setup complete: {init_data.get('setupComplete', True)}")
+                except Exception as e:
+                    logger.debug(f"Vertex setup response notice: {e}")
+
                 # Task: Client -> Vertex Bidi
                 async def client_to_bidi():
                     try:
                         while True:
                             data = await websocket.receive()
+                            if data.get("type") == "websocket.disconnect":
+                                break
                             if "text" in data and data["text"]:
                                 payload = json.loads(data["text"])
                                 msg_type = payload.get("type", "USER_CHAT")
-                                if msg_type == "USER_CHAT":
+                                if msg_type == "START_SESSION":
+                                    cust_name = payload.get("customer_name") or customer.name or "there"
+                                    greeting_turn = {
+                                        "clientContent": {
+                                            "turns": [
+                                                {
+                                                    "role": "user",
+                                                    "parts": [{"text": f"Please give a warm, dynamic, non-static spoken greeting to {cust_name} as Kabir, introducing yourself as Mahindra's AI Showroom Specialist, welcoming them to the virtual showroom in {session_mgr.language}, and asking which SUV or electric vehicle they'd like to check out today."}]
+                                                }
+                                            ],
+                                            "turnComplete": True
+                                        }
+                                    }
+                                    await bidi_ws.send(json.dumps(greeting_turn))
+                                elif msg_type == "USER_CHAT":
                                     user_text = payload.get("text", "")
                                     bidi_turn = {
                                         "clientContent": {
@@ -253,7 +307,7 @@ async def live_audio_websocket(websocket: WebSocket):
                                 }
                                 await bidi_ws.send(json.dumps(realtime_input))
                     except Exception as e:
-                        logger.debug(f"Client to Bidi ended: {e}")
+                        logger.debug(f"Client to Bidi finished: {e}")
 
                 # Task: Vertex Bidi -> Client
                 async def bidi_to_client():
@@ -266,7 +320,67 @@ async def live_audio_websocket(websocket: WebSocket):
                                 model_turn = server_content.get("modelTurn") or {}
                                 parts = model_turn.get("parts") or []
 
+                                # 1. Check for Gemini Live Tool Calls (e.g. switch_vehicle_showroom)
+                                tool_call_obj = bidi_data.get("toolCall") or server_content.get("toolCall")
+                                if tool_call_obj:
+                                    function_calls = tool_call_obj.get("functionCalls", [])
+                                    for fc in function_calls:
+                                        fc_name = fc.get("name")
+                                        call_id = fc.get("id")
+                                        fc_args = fc.get("args", {})
+                                        logger.info(f"Gemini Live Tool Call: {fc_name} {fc_args}")
+
+                                        # Respond back to Gemini Live
+                                        tool_resp = {
+                                            "toolResponse": {
+                                                "functionResponses": [
+                                                    {
+                                                        "response": {"output": {"status": "success", "executed": fc_name}},
+                                                        "id": call_id
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                        await bidi_ws.send(json.dumps(tool_resp))
+
+                                        # Emit UI action to client
+                                        await websocket.send_text(json.dumps({
+                                            "type": "UI_ACTION",
+                                            "tool_name": fc_name,
+                                            "tool_args": fc_args
+                                        }))
+
+                                # 2. Check for speech transcriptions from Gemini Live
+                                out_trans = server_content.get("outputTranscription")
+                                if out_trans and out_trans.get("text"):
+                                    await websocket.send_text(json.dumps({
+                                        "type": "ASSISTANT_RESPONSE",
+                                        "speaker": "mia",
+                                        "message": out_trans["text"],
+                                        "language": session_mgr.language
+                                    }))
+
+                                in_trans = server_content.get("inputTranscription")
+                                if in_trans and in_trans.get("text"):
+                                    await websocket.send_text(json.dumps({
+                                        "type": "USER_TRANSCRIPTION",
+                                        "speaker": "customer",
+                                        "message": in_trans["text"]
+                                    }))
+
+                                # 3. Process Video, Audio, and Text parts
                                 for part in parts:
+                                    # Function calls inside model_turn parts
+                                    if "functionCall" in part:
+                                        fc = part["functionCall"]
+                                        fc_name = fc.get("name")
+                                        fc_args = fc.get("args", {})
+                                        await websocket.send_text(json.dumps({
+                                            "type": "UI_ACTION",
+                                            "tool_name": fc_name,
+                                            "tool_args": fc_args
+                                        }))
+
                                     if "inlineData" in part:
                                         mime_type = part["inlineData"].get("mimeType", "")
                                         data_b64 = part["inlineData"].get("data")
@@ -282,7 +396,6 @@ async def live_audio_websocket(websocket: WebSocket):
                                                 "audio_b64": data_b64,
                                                 "mime_type": mime_type or "audio/pcm;rate=24000"
                                             }))
-                                    # Text / transcript chunk from Vertex Live
                                     if "text" in part:
                                         await websocket.send_text(json.dumps({
                                             "type": "ASSISTANT_RESPONSE",
@@ -293,21 +406,41 @@ async def live_audio_websocket(websocket: WebSocket):
                             except Exception as e:
                                 logger.debug(f"Error parsing bidi message: {e}")
                     except Exception as e:
-                        logger.debug(f"Bidi to client ended: {e}")
+                        logger.debug(f"Bidi to client finished: {e}")
 
-                # Run both tasks concurrently
-                await asyncio.gather(client_to_bidi(), bidi_to_client())
+                done, pending = await asyncio.wait(
+                    [asyncio.create_task(client_to_bidi()), asyncio.create_task(bidi_to_client())],
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+                for task in pending:
+                    task.cancel()
                 return
         except Exception as e:
-            logger.warning(f"Bidi connection fallback: {e}")
+            logger.warning(f"Vertex Bidi connection notice (falling back to interactive session): {e}")
 
-    # Fallback loop if direct bidi connection dropped
+    # Resilient local fallback session loop
     try:
         while True:
             data = await websocket.receive()
+            if data.get("type") == "websocket.disconnect":
+                break
             if "text" in data and data["text"]:
                 payload = json.loads(data["text"])
-                if payload.get("type") == "USER_CHAT":
+                msg_type = payload.get("type", "USER_CHAT")
+                if msg_type == "START_SESSION":
+                    cust_name = payload.get("customer_name") or customer.name or "there"
+                    prompt = f"Please give a warm, dynamic, non-static spoken greeting to {cust_name} as Kabir, introducing yourself as Mahindra's AI Showroom Specialist, welcoming them to the showroom in {session_mgr.language}, and asking which SUV or electric vehicle they'd like to check out today."
+                    result = await session_mgr.process_user_text_or_intent(prompt, lambda ev: None)
+                    await websocket.send_text(json.dumps({
+                        "type": "ASSISTANT_RESPONSE",
+                        "session_id": session_id,
+                        "speaker": "mia",
+                        "message": result["message"],
+                        "tool_call": result.get("tool_call"),
+                        "tool_args": result.get("tool_args", {}),
+                        "language": result.get("language", session_mgr.language)
+                    }))
+                elif msg_type == "USER_CHAT":
                     user_text = payload.get("text", "")
                     result = await session_mgr.process_user_text_or_intent(user_text, lambda ev: None)
                     await websocket.send_text(json.dumps({
@@ -321,3 +454,6 @@ async def live_audio_websocket(websocket: WebSocket):
                     }))
     except WebSocketDisconnect:
         pass
+    except Exception as e:
+        logger.debug(f"Live audio session closed: {e}")
+

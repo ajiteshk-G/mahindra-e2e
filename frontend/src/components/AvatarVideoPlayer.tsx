@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { Sparkles, Volume2 } from "lucide-react";
 
 interface AvatarVideoPlayerProps {
   isRecording: boolean;
@@ -9,195 +10,113 @@ interface AvatarVideoPlayerProps {
 }
 
 export function AvatarVideoPlayer({ isRecording, rmsLevel, isSpeaking }: AvatarVideoPlayerProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const jayImgRef = useRef<HTMLImageElement | null>(null);
-  const [imageLoaded, setImageLoaded] = useState(false);
-
-  // Store live state in mutable refs so the animation loop never tears down
-  const rmsRef = useRef(rmsLevel);
-  const isSpeakingRef = useRef(isSpeaking);
-  const isRecordingRef = useRef(isRecording);
+  const [hasVideoStream, setHasVideoStream] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
-    rmsRef.current = rmsLevel;
-    isSpeakingRef.current = isSpeaking;
-    isRecordingRef.current = isRecording;
-  }, [rmsLevel, isSpeaking, isRecording]);
+    const video = document.getElementById("video_player") as HTMLVideoElement | null;
+    if (!video) return;
+    videoRef.current = video;
 
-  useEffect(() => {
-    const img = new Image();
-    img.src = "/avatars/jay.png";
-    img.onload = () => {
-      jayImgRef.current = img;
-      setImageLoaded(true);
+    const handlePlaying = () => setHasVideoStream(true);
+    const handlePause = () => setHasVideoStream(false);
+    const handleEnded = () => setHasVideoStream(false);
+
+    video.addEventListener("playing", handlePlaying);
+    video.addEventListener("pause", handlePause);
+    video.addEventListener("ended", handleEnded);
+
+    return () => {
+      video.removeEventListener("playing", handlePlaying);
+      video.removeEventListener("pause", handlePause);
+      video.removeEventListener("ended", handleEnded);
     };
   }, []);
 
-  useEffect(() => {
-    if (!imageLoaded) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d", { alpha: false });
-    if (!ctx) return;
-
-    canvas.width = 540;
-    canvas.height = 340;
-
-    let frameCount = 0;
-    let animId: number;
-    let currentMouthOpen = 0;
-
-    const render = () => {
-      frameCount++;
-      const currentRms = rmsRef.current;
-      const currentlySpeaking = isSpeakingRef.current || currentRms > 0.05;
-      const currentlyRecording = isRecordingRef.current;
-
-      // Smooth breathing physics & subtle head sway
-      const breathY = Math.sin(frameCount * 0.03) * 2;
-      const headTilt = Math.sin(frameCount * 0.015) * 0.5;
-      const speakingScale = currentlySpeaking ? 1 + Math.min(0.03, currentRms * 0.06) : 1;
-
-      // Dynamic mouth aperture sync
-      const targetMouth = currentlySpeaking
-        ? Math.min(10, Math.max(1, currentRms * 14 + Math.sin(frameCount * 0.5) * 4))
-        : 0;
-      currentMouthOpen += (targetMouth - currentMouthOpen) * 0.35;
-
-      // 1. Futuristic Automotive Virtual Studio Backdrop
-      const bgGrad = ctx.createRadialGradient(270, 170, 40, 270, 170, 300);
-      bgGrad.addColorStop(0, "#0B1528");
-      bgGrad.addColorStop(0.5, "#060B16");
-      bgGrad.addColorStop(1, "#020408");
-      ctx.fillStyle = bgGrad;
-      ctx.fillRect(0, 0, 540, 340);
-
-      // Studio grid illumination
-      ctx.strokeStyle = "rgba(0, 229, 255, 0.06)";
-      ctx.lineWidth = 1;
-      for (let x = 0; x < 540; x += 45) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, 340);
-        ctx.stroke();
-      }
-
-      // Dynamic Speaking Halo behind Jay
-      if (currentlySpeaking || currentlyRecording) {
-        const glowRadius = 140 + (currentlySpeaking ? currentRms * 50 : 15);
-        const glowGrad = ctx.createRadialGradient(270, 150, 30, 270, 150, glowRadius);
-        glowGrad.addColorStop(0, "rgba(0, 229, 255, 0.35)");
-        glowGrad.addColorStop(0.6, "rgba(37, 99, 235, 0.15)");
-        glowGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
-        ctx.fillStyle = glowGrad;
-        ctx.beginPath();
-        ctx.arc(270, 150, glowRadius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // 2. Render Official Photorealistic Jay Avatar with Real-time Lip Movements
-      if (jayImgRef.current && jayImgRef.current.complete) {
-        ctx.save();
-        ctx.translate(270, 170 + breathY);
-        ctx.rotate((headTilt * Math.PI) / 180);
-        ctx.scale(speakingScale, speakingScale);
-
-        const img = jayImgRef.current;
-        const targetW = 280;
-        const targetH = (targetW * img.height) / img.width;
-
-        // Base Jay portrait
-        ctx.drawImage(img, -targetW / 2, -targetH * 0.32, targetW, targetH);
-
-        // Realistic Lip Movement Aperture Layer
-        if (currentMouthOpen > 1.8) {
-          ctx.save();
-          const mouthX = 0;
-          const mouthY = -targetH * 0.32 + targetH * 0.395; // Exact mouth Y coordinate on Jay's portrait
-
-          // Natural inner mouth shadow
-          ctx.fillStyle = "#2D0A0E";
-          ctx.beginPath();
-          ctx.ellipse(mouthX, mouthY, 7.5, currentMouthOpen * 0.45, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Subtle upper teeth reflection
-          ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
-          ctx.fillRect(mouthX - 4, mouthY - currentMouthOpen * 0.45 + 0.5, 8, Math.min(2.5, currentMouthOpen * 0.25));
-
-          // Natural lower lip tone
-          ctx.strokeStyle = "rgba(180, 100, 85, 0.5)";
-          ctx.lineWidth = 1.2;
-          ctx.beginPath();
-          ctx.ellipse(mouthX, mouthY + 0.5, 8, currentMouthOpen * 0.45 + 0.8, 0, 0, Math.PI);
-          ctx.stroke();
-
-          ctx.restore();
-        }
-
-        ctx.restore();
-      }
-
-      // 3. Top-Left Live Video HUD Overlay
-      ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
-      ctx.fillRect(12, 12, 170, 26);
-      ctx.strokeStyle = "rgba(0, 229, 255, 0.4)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(12, 12, 170, 26);
-
-      // Live Pulsing Dot
-      ctx.fillStyle = currentlySpeaking ? "#00E5FF" : currentlyRecording ? "#10B981" : "#94A3B8";
-      ctx.beginPath();
-      ctx.arc(24, 25, 4.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Label
-      ctx.fillStyle = "#FFFFFF";
-      ctx.font = "bold 11px system-ui, sans-serif";
-      ctx.fillText(
-        currentlySpeaking ? "JAY (KABIR SPEAKING)" : currentlyRecording ? "JAY (KABIR LISTENING)" : "JAY (STANDBY)",
-        36,
-        29
-      );
-
-      // Top-Right Model & Modality Badge
-      ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
-      ctx.fillRect(400, 12, 128, 26);
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
-      ctx.strokeRect(400, 12, 128, 26);
-
-      ctx.fillStyle = "#38BDF8";
-      ctx.font = "bold 10px monospace";
-      ctx.fillText("LIVE AVATAR 60FPS", 408, 29);
-
-      animId = requestAnimationFrame(render);
-    };
-
-    render();
-
-    return () => {
-      if (animId) {
-        cancelAnimationFrame(animId);
-      }
-    };
-  }, [imageLoaded]);
-
   return (
     <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-2xl bg-[#020408]">
-      {/* HTML5 Live Video Element for Vertex AI Gemini 3.1 Live Avatar Video Stream */}
+      {/* HTML5 Live Video Element for Gemini Live Avatar Video Stream */}
       <video
         id="video_player"
         autoPlay
         playsInline
         muted={false}
-        className="w-full h-full object-cover rounded-2xl z-10"
+        className={`w-full h-full object-cover rounded-2xl z-10 transition-opacity duration-300 ${
+          hasVideoStream ? "opacity-100" : "opacity-0"
+        }`}
       />
-      {/* Standby Canvas overlay if video stream is initializing */}
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 w-full h-full object-cover rounded-2xl pointer-events-none -z-0"
-      />
+
+      {/* Standby / Placeholder Overlay when video stream is connecting or in standby */}
+      <div
+        className={`absolute inset-0 z-0 bg-gradient-to-b from-[#0F172A] to-[#060912] flex flex-col items-center justify-center p-4 transition-opacity duration-300 ${
+          hasVideoStream ? "opacity-0 pointer-events-none" : "opacity-100"
+        }`}
+      >
+        <div className="relative flex flex-col items-center justify-center">
+          {/* Ambient Glow */}
+          <div
+            className={`absolute w-36 h-36 rounded-full bg-cyan-500/20 filter blur-2xl transition-all duration-300 ${
+              isSpeaking ? "scale-125 opacity-100" : isRecording ? "scale-105 opacity-60" : "scale-90 opacity-20"
+            }`}
+          />
+
+          {/* Avatar Portrait */}
+          <div className="relative mb-3">
+            <div
+              className={`w-20 h-20 rounded-full overflow-hidden border-2 transition-all duration-300 p-0.5 bg-[#0B0F17] flex items-center justify-center ${
+                isSpeaking
+                  ? "border-cyan-400 shadow-[0_0_20px_rgba(0,229,255,0.6)] scale-105"
+                  : isRecording
+                  ? "border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.4)]"
+                  : "border-white/20"
+              }`}
+            >
+              <img
+                src="/avatars/jay.png"
+                alt="Kabir Avatar"
+                className="w-full h-full object-cover object-[50%_15%] rounded-full"
+              />
+            </div>
+            {isSpeaking && (
+              <span className="absolute -bottom-1 -right-1 bg-cyan-500 text-white p-1 rounded-full shadow-md">
+                <Volume2 className="w-3 h-3 animate-pulse" />
+              </span>
+            )}
+          </div>
+
+          <div className="text-center space-y-1">
+            <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-white">
+              <span>Kabir</span>
+              <span className="text-[10px] text-cyan-400 font-mono font-medium">Mahindra AI Specialist</span>
+            </div>
+            <p className="text-[11px] text-slate-400 max-w-[220px]">
+              {isRecording ? "Listening & streaming Gemini Live Avatar..." : "Click Start Live Session to talk with Kabir"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Top-Left Live Video HUD Badge */}
+      <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-cyan-400/30 text-[10px] font-bold text-white shadow-md">
+        <span
+          className={`w-2 h-2 rounded-full ${
+            isSpeaking
+              ? "bg-cyan-400 shadow-[0_0_8px_#00e5ff] animate-ping"
+              : isRecording
+              ? "bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse"
+              : "bg-slate-400"
+          }`}
+        />
+        <span>
+          {isSpeaking ? "KABIR SPEAKING" : isRecording ? "KABIR LISTENING" : "KABIR STANDBY"}
+        </span>
+      </div>
+
+      {/* Top-Right Modality Badge */}
+      <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-[9px] font-mono text-cyan-300 shadow-md">
+        <Sparkles className="w-3 h-3 text-cyan-400" />
+        <span>GEMINI LIVE AVATAR</span>
+      </div>
     </div>
   );
 }

@@ -32,21 +32,27 @@ interface PreSalesShowroomProps {
   vehicles: VehicleItem[];
   currentProfile: CustomerProfile | null;
   onProfileUpdated: () => void;
+  selectedVehicleId: string;
+  onSelectVehicleId: (id: string) => void;
+  onOpenChat: (targetVehicle?: VehicleItem) => void;
+  isChatOpen: boolean;
+  onSendChatMessage?: (text: string) => void;
 }
 
 export function PreSalesShowroom({
   vehicles,
   currentProfile,
-  onProfileUpdated
+  onProfileUpdated,
+  selectedVehicleId,
+  onSelectVehicleId,
+  onOpenChat,
+  isChatOpen,
+  onSendChatMessage
 }: PreSalesShowroomProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>("thar_roxx");
 
   // Layout mode: "carousel" (like reference app) or "grid"
   const [viewMode, setViewMode] = useState<"carousel" | "grid">("carousel");
-
-  // Chat window state: Closed by default
-  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Modals state
   const [isTestDriveOpen, setIsTestDriveOpen] = useState(false);
@@ -85,33 +91,13 @@ export function PreSalesShowroom({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Live Voice & Chat Hook
-  const handleUiEvent = (event: any) => {
-    if (event.tool_name === "show_vehicle_spotlight" && event.tool_args?.vehicle_id) {
-      setSelectedVehicleId(event.tool_args.vehicle_id);
-    } else if (event.tool_name === "compare_vehicles") {
-      const v1 = vehicles.find((v) => v.id === event.tool_args?.vehicle_id_1) || vehicles[0];
-      const v2 = vehicles.find((v) => v.id === event.tool_args?.vehicle_id_2) || vehicles[1];
-      setModalVehicle(v1);
-      setCompareVehicle2(v2);
-      setIsCompareOpen(true);
-    } else if (event.tool_name === "open_test_drive_booking") {
-      const v = vehicles.find((item) => item.id === event.tool_args?.vehicle_id) || vehicles.find((v) => v.id === selectedVehicleId) || vehicles[0];
-      setModalVehicle(v);
-      setIsTestDriveOpen(true);
+  // Auto-scroll the vehicle carousel to keep the active vehicle centered
+  useEffect(() => {
+    const card = document.getElementById(`carousel-card-${selectedVehicleId}`);
+    if (card && carouselRef.current) {
+      card.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
     }
-  };
-
-  const {
-    isRecording,
-    rmsLevel,
-    messages,
-    activeLanguage,
-    startVoiceRecording,
-    stopVoiceRecording,
-    sendTextMessage,
-    playAudioGreeting
-  } = useLiveVoice(handleUiEvent);
+  }, [selectedVehicleId]);
 
   const categories = [
     { id: "ALL", label: "All Lineup (12)" },
@@ -129,18 +115,9 @@ export function PreSalesShowroom({
   const isElectric = currentVehicle?.category === "Born Electric SUV";
 
   const handleStartConsultation = (vehicle?: VehicleItem) => {
-    if (vehicle) setSelectedVehicleId(vehicle.id);
-
-    if (!currentProfile && !activeSession) {
-      // Require Name and Phone number with regex check first
-      setIsLeadModalOpen(true);
-      return;
-    }
-
-    // Verified customer -> allow chat dialog box to run avatar
-    setIsChatOpen(true);
-    playAudioGreeting();
-    if (!isRecording) startVoiceRecording();
+    const target = vehicle || currentVehicle;
+    if (vehicle) onSelectVehicleId(vehicle.id);
+    onOpenChat(target);
   };
 
   const handleCustomerIdentified = (data: any) => {
@@ -154,12 +131,7 @@ export function PreSalesShowroom({
     });
     setIsLeadModalOpen(false);
     onProfileUpdated();
-
-    // Now verified -> allow chat dialog box to run avatar and greet customer
-    setIsChatOpen(true);
-    const greetingText = `Namaste ${data.name}! Welcome to Mahindra Virtual Showroom. I am Kabir, your AI Showroom Specialist. Ask me anything about our SUV lineup or speak with me in your preferred language!`;
-    playAudioGreeting(greetingText, data.name);
-    startVoiceRecording();
+    onOpenChat(currentVehicle);
   };
 
   const handleOpenTestDrive = (targetVehicle: VehicleItem) => {
@@ -319,10 +291,9 @@ export function PreSalesShowroom({
         </div>
       </div>
 
-      {/* DYNAMIC LAYOUT: Full-Width by default, Split-Screen when chat opened */}
-      <div className={isChatOpen ? "grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" : "w-full space-y-6"}>
-        {/* LEFT COLUMN: Vehicle Showroom Showcase */}
-        <div className={isChatOpen ? "lg:col-span-7 xl:col-span-8 space-y-6" : "w-full space-y-6"}>
+      {/* Showroom Showcase Container */}
+      <div className="w-full space-y-6">
+        <div className="w-full space-y-6">
           {/* Active Car Hero Spotlight Stage Card */}
           <div
             ref={heroCardRef}
@@ -347,21 +318,67 @@ export function PreSalesShowroom({
                 </span>
               </div>
 
-              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
-                <Award className="w-3 h-3 text-emerald-600" />
-                5-Star NCAP
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
+                  <Award className="w-3 h-3 text-emerald-600" />
+                  5-Star NCAP
+                </span>
+
+                <button
+                  onClick={() => handleStartConsultation(currentVehicle)}
+                  className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white shadow-xs transition-all hover:scale-105 cursor-pointer group"
+                  title="Talk to Kabir AI Specialist (Gemini Live Avatar)"
+                >
+                  <div className="relative w-5 h-5 rounded-full overflow-hidden border border-cyan-400 shrink-0">
+                    <img src="/avatars/jay.png" alt="Kabir Avatar" className="w-full h-full object-cover" />
+                    <span className="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  </div>
+                  <span className="text-[10px] font-bold text-cyan-300 flex items-center gap-1">
+                    Gemini Live Avatar
+                  </span>
+                </button>
+              </div>
             </div>
 
-            {/* Vehicle Title & Tagline */}
-            <div>
-              <div className="text-[10px] font-extrabold text-red-600 uppercase tracking-widest">Active Spotlight</div>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight mt-0.5">
-                {currentVehicle.name}
-              </h2>
-              <p className="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed font-medium">
-                {currentVehicle.tagline}
-              </p>
+            {/* Vehicle Title & Tagline + Avatar Quick Action Banner */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-extrabold text-red-600 uppercase tracking-widest">Active Spotlight</div>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight mt-0.5">
+                  {currentVehicle.name}
+                </h2>
+                <p className="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed font-medium">
+                  {currentVehicle.tagline}
+                </p>
+              </div>
+
+              <button
+                onClick={() => handleStartConsultation(currentVehicle)}
+                className="self-start sm:self-auto flex items-center gap-3 p-2.5 pr-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-cyan-500/30 hover:border-cyan-400 text-white shadow-lg transition-all hover:scale-102 cursor-pointer group text-left shrink-0"
+                title="Click to talk with Kabir Gemini Live Avatar"
+              >
+                <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-cyan-400 shadow-[0_0_12px_rgba(0,229,255,0.4)] shrink-0 bg-slate-800">
+                  <img
+                    src="/avatars/jay.png"
+                    alt="Kabir Avatar"
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                  />
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-slate-900 animate-pulse"></span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-black text-white group-hover:text-cyan-300 transition-colors">
+                      Kabir Live AI
+                    </span>
+                    <span className="text-[9px] font-mono text-cyan-400 bg-cyan-950/80 px-1.5 py-0.2 rounded border border-cyan-500/30">
+                      LIVE
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 group-hover:text-slate-300">
+                    Click to start audio/video chat
+                  </p>
+                </div>
+              </button>
             </div>
 
             {/* Studio Presentation Canvas */}
@@ -405,7 +422,7 @@ export function PreSalesShowroom({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
               <button
                 onClick={() => handleStartConsultation(currentVehicle)}
-                className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white py-3 rounded-xl font-black shadow-md shadow-red-600/25 flex items-center justify-center gap-2 transition-all hover:scale-102 text-xs"
+                className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white py-3 rounded-xl font-black shadow-md shadow-red-600/25 flex items-center justify-center gap-2 transition-all hover:scale-102 text-xs cursor-pointer"
               >
                 <Sparkles className="w-4 h-4" />
                 <span>Speak with Kabir about {currentVehicle.name.split(" (")[0]}</span>
@@ -413,7 +430,7 @@ export function PreSalesShowroom({
 
               <button
                 onClick={() => handleOpenTestDrive(currentVehicle)}
-                className="bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-black shadow-md flex items-center justify-center gap-2 transition-all text-xs"
+                className="bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-black shadow-md flex items-center justify-center gap-2 transition-all text-xs cursor-pointer"
               >
                 <Calendar className="w-4 h-4 text-red-400" />
                 <span>Book Test Drive / Enquiry</span>
@@ -421,7 +438,7 @@ export function PreSalesShowroom({
 
               <button
                 onClick={() => handleOpenCompare(currentVehicle)}
-                className="bg-white hover:bg-slate-100 text-slate-700 py-3 rounded-xl font-bold border border-slate-300 flex items-center justify-center gap-2 shadow-xs transition-all text-xs"
+                className="bg-white hover:bg-slate-100 text-slate-700 py-3 rounded-xl font-bold border border-slate-300 flex items-center justify-center gap-2 shadow-xs transition-all text-xs cursor-pointer"
               >
                 <Layers className="w-4 h-4 text-cyan-600" />
                 <span>Compare Specs Matrix</span>
@@ -492,10 +509,11 @@ export function PreSalesShowroom({
                   return (
                     <div
                       key={vehicle.id}
+                      id={`carousel-card-${vehicle.id}`}
                       onClick={() => {
-                        setSelectedVehicleId(vehicle.id);
-                        if (isChatOpen) {
-                          sendTextMessage(`Tell me about ${vehicle.name}`);
+                        onSelectVehicleId(vehicle.id);
+                        if (isChatOpen && onSendChatMessage) {
+                          onSendChatMessage(`Tell me about ${vehicle.name}`);
                         }
                       }}
                       className={`min-w-[240px] max-w-[260px] rounded-2xl transition-all duration-300 cursor-pointer overflow-hidden border p-3.5 flex flex-col justify-between group bg-white shadow-xs shrink-0 snap-start ${
@@ -561,10 +579,11 @@ export function PreSalesShowroom({
                   return (
                     <div
                       key={vehicle.id}
+                      id={`grid-card-${vehicle.id}`}
                       onClick={() => {
-                        setSelectedVehicleId(vehicle.id);
-                        if (isChatOpen) {
-                          sendTextMessage(`Tell me about ${vehicle.name}`);
+                        onSelectVehicleId(vehicle.id);
+                        if (isChatOpen && onSendChatMessage) {
+                          onSendChatMessage(`Tell me about ${vehicle.name}`);
                         }
                       }}
                       className={`rounded-2xl transition-all duration-300 cursor-pointer overflow-hidden border p-3.5 flex flex-col justify-between group bg-white shadow-xs ${
@@ -624,44 +643,7 @@ export function PreSalesShowroom({
             )}
           </div>
         </div>
-
-        {/* RIGHT COLUMN: Slide-in Chat & Avatar Panel when activated */}
-        {isChatOpen && (
-          <div className="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-20">
-            <ChatAvatarPanel
-              isRecording={isRecording}
-              rmsLevel={rmsLevel}
-              messages={messages}
-              activeLanguage={activeLanguage}
-              onToggleRecording={isRecording ? stopVoiceRecording : () => handleStartConsultation()}
-              onSendMessage={sendTextMessage}
-              onClose={() => setIsChatOpen(false)}
-            />
-          </div>
-        )}
       </div>
-
-      {/* Proper Floating "Talk to Kabir" Button */}
-      {!isChatOpen && (
-        <div className="fixed bottom-6 right-6 z-40 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <button
-            onClick={() => handleStartConsultation(currentVehicle)}
-            className="flex items-center gap-3 px-5 py-3.5 rounded-full bg-[#0B0F17] hover:bg-[#151D2C] border-2 border-red-500/70 shadow-[0_8px_30px_rgba(227,24,55,0.35)] text-white font-black text-xs transition-all hover:scale-105 group active:scale-95 cursor-pointer"
-            title="Talk to Kabir AI Showroom Specialist"
-          >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-red-600 to-red-500 flex items-center justify-center shadow-md shrink-0">
-              <Bot className="w-4 h-4 text-white" />
-            </div>
-            <div className="text-left">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-black tracking-tight text-white">Talk to Kabir</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse"></span>
-              </div>
-              <p className="text-[10px] text-slate-300 font-medium">Mahindra AI Specialist</p>
-            </div>
-          </button>
-        </div>
-      )}
 
       {/* Modals for Test Drive, Compare, Lead Identification, and History */}
       {modalVehicle && (

@@ -25,6 +25,7 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const recognitionRef = useRef<any>(null);
   const sessionIdRef = useRef<string>(`SESS-${Date.now()}`);
@@ -37,23 +38,7 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
   }, []);
 
   const playAudioGreeting = useCallback((customGreeting?: string, customerName?: string) => {
-    let greetingText = customGreeting || KABIR_AUDIO_GREETING;
-    if (customerName) {
-      greetingText = `Namaste ${customerName}! Welcome to Mahindra Virtual Showroom. I am Kabir, your AI Showroom Specialist. Ask me anything about our SUV lineup or speak with me in your preferred language!`;
-    }
-
-    // Record greeting in transcript
-    setMessages([
-      {
-        id: `greeting-${Date.now()}`,
-        speaker: "mia",
-        text: greetingText,
-        timestamp: new Date().toLocaleTimeString(),
-        language: "Hinglish"
-      }
-    ]);
-
-    // Trigger Jay Live Avatar stream from Vertex AI
+    // Send prompt to Gemini Live WebSocket if connected
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(
         JSON.stringify({
@@ -64,21 +49,44 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
     }
   }, []);
 
-  const isProxyEnvironment = () => {
-    if (typeof window === "undefined") return false;
-    const host = window.location.hostname;
-    return host.includes("proxy.googlers.com") || host.includes("googleusercontent.com");
-  };
+  const onUiEventRef = useRef(onUiEvent);
+  useEffect(() => {
+    onUiEventRef.current = onUiEvent;
+  }, [onUiEvent]);
+
+  const activeLanguageRef = useRef(activeLanguage);
+  useEffect(() => {
+    activeLanguageRef.current = activeLanguage;
+  }, [activeLanguage]);
 
   const getWebSocketUrl = () => {
     if (typeof window === "undefined") return null;
-    if (isProxyEnvironment()) return null;
-    const host = window.location.host || "127.0.0.1:3000";
+    if (process.env.NEXT_PUBLIC_WS_URL) {
+      return process.env.NEXT_PUBLIC_WS_URL;
+    }
+
+    const hostname = window.location.hostname;
+    // Direct WebSocket is only supported on direct local loopback (port 8000).
+    // In web preview / proxy / remote environments, we use HTTP REST streaming fallback to avoid browser connection errors.
+    const isLocalLoopback = hostname === "localhost" || hostname === "127.0.0.1";
+    if (!isLocalLoopback) {
+      return null;
+    }
+
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${protocol}//${host}/ws/live-audio`;
+    return `${protocol}//127.0.0.1:8000/ws/live-audio`;
   };
 
   const connectWebSocket = useCallback(() => {
+    if (socketRef.current) {
+      if (
+        socketRef.current.readyState === WebSocket.CONNECTING ||
+        socketRef.current.readyState === WebSocket.OPEN
+      ) {
+        return;
+      }
+    }
+
     const wsUrl = getWebSocketUrl();
     if (!wsUrl) {
       setIsConnected(true);
@@ -101,28 +109,100 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
           } else if (payload.type === "AUDIO_CHUNK" && payload.audio_b64) {
             audioOutputManagerRef.current?.playAudioChunk(payload.audio_b64);
             setRmsLevel(0.35 + Math.random() * 0.45);
-          } else if (payload.type === "SESSION_INIT") {
-            if (payload.session_id) {
-              sessionIdRef.current = payload.session_id;
-            }
-          } else if (payload.type === "SESSION_INITIALIZED") {
+          } else if (payload.type === "SESSION_INIT" || payload.type === "SESSION_INITIALIZED") {
             if (payload.session_id) sessionIdRef.current = payload.session_id;
-          } else if (payload.type === "ASSISTANT_RESPONSE") {
-            const detectedLang = payload.language || activeLanguage;
+          } else if (payload.type === "USER_TRANSCRIPTION" && payload.message) {
+            setMessages((prev) => {
+              if (prev.length > 0) {
+                const lastMsg = prev[prev.length - 1];
+                if (lastMsg.speaker === "customer") {
+                  let newText = "";
+                  if (payload.message.startsWith(lastMsg.text)) {
+                    newText = payload.message;
+                  } else if (lastMsg.text.startsWith(payload.message)) {
+                    newText = lastMsg.text;
+                  } else {
+                    const sep = (lastMsg.text.endsWith(" ") || payload.message.startsWith(" ")) ? "" : " ";
+                    newText = lastMsg.text + sep + payload.message;
+                  }
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    ...lastMsg,
+                    text: newText.trim()
+                  };
+                  return updated;
+                }
+              }
+              return [
+                ...prev,
+                {
+                  id: (Date.now() + Math.random()).toString(),
+                  speaker: "customer",
+                  text: payload.message.trim(),
+                  timestamp: new Date().toLocaleTimeString()
+                }
+              ];
+            });
+          } else if (payload.type === "ASSISTANT_RESPONSE" && payload.message) {
+            const detectedLang = payload.language || activeLanguageRef.current;
             if (payload.language) {
               setActiveLanguage(payload.language);
             }
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: Date.now().toString(),
-                speaker: "mia",
-                text: payload.message,
-                timestamp: new Date().toLocaleTimeString(),
-                toolCall: payload.tool_call,
-                language: detectedLang
+            setMessages((prev) => {
+              if (prev.length > 0) {
+                const lastMsg = prev[prev.length - 1];
+                if (lastMsg.speaker === "mia") {
+                  let newText = "";
+                  if (payload.message.startsWith(lastMsg.text)) {
+                    newText = payload.message;
+                  } else if (lastMsg.text.startsWith(payload.message)) {
+                    newText = lastMsg.text;
+                  } else if (payload.is_delta || payload.message.length < 40) {
+                    const sep = (lastMsg.text.endsWith(" ") || payload.message.startsWith(" ")) ? "" : " ";
+                    newText = lastMsg.text + sep + payload.message;
+                  } else {
+                    newText = payload.message;
+                  }
+
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    ...lastMsg,
+                    text: newText.trim(),
+                    toolCall: payload.tool_call || lastMsg.toolCall,
+                    language: detectedLang
+                  };
+                  return updated;
+                }
               }
-            ]);
+              return [
+                ...prev,
+                {
+                  id: (Date.now() + Math.random()).toString(),
+                  speaker: "mia",
+                  text: payload.message.trim(),
+                  timestamp: new Date().toLocaleTimeString(),
+                  toolCall: payload.tool_call,
+                  language: detectedLang
+                }
+              ];
+            });
+
+            // Speak greeting and responses with Web Speech API if PCM audio stream is not present
+            if (typeof window !== "undefined" && "speechSynthesis" in window && !payload.audio_b64) {
+              try {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(payload.message);
+                utterance.lang = (detectedLang === "English" || detectedLang === "en-IN") ? "en-IN" : "hi-IN";
+                utterance.rate = 1.02;
+                utterance.pitch = 1.0;
+                utterance.onstart = () => setRmsLevel(0.45);
+                utterance.onend = () => setRmsLevel(0);
+                utterance.onerror = () => setRmsLevel(0);
+                window.speechSynthesis.speak(utterance);
+              } catch (ttsErr) {
+                console.debug("TTS notice:", ttsErr);
+              }
+            }
 
             const words = (payload.message || "").split(/\s+/).length;
             const durationMs = Math.min(8000, Math.max(2500, words * 170));
@@ -138,14 +218,14 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
             };
             animLip();
           } else if (payload.type === "UI_ACTION") {
-            if (onUiEvent) {
-              onUiEvent(payload);
+            if (onUiEventRef.current) {
+              onUiEventRef.current(payload);
             }
           } else if (payload.type === "AUDIO_ENERGY") {
             setRmsLevel(payload.rms * 2.5);
           }
         } catch (e) {
-          console.debug("WS message parsing notice:", e);
+          // silently handle
         }
       };
 
@@ -161,12 +241,15 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
     } catch (e) {
       setIsConnected(true);
     }
-  }, [onUiEvent, activeLanguage]);
+  }, []);
 
   useEffect(() => {
     connectWebSocket();
     return () => {
-      socketRef.current?.close();
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+      }
     };
   }, [connectWebSocket]);
 
@@ -197,6 +280,7 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
       return;
     }
 
+    // Seamless REST Fallback with TTS
     try {
       const res = await fetch("/api/live/chat", {
         method: "POST",
@@ -249,49 +333,69 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
         }
       }
     } catch (err) {
-      console.debug("REST chat fallback notice:", err);
+      console.debug("REST fallback notice:", err);
     }
   };
 
-  const startVoiceRecording = async () => {
-    // Speak audio greeting when starting session if initial turn
-    if (messages.length <= 1) {
-      playAudioGreeting();
-    }
-
+  const startVoiceRecording = async (customerName?: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
 
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({
+        sampleRate: 16000
+      });
       audioContextRef.current = audioCtx;
 
       const source = audioCtx.createMediaStreamSource(stream);
-      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
 
-      processor.onaudioprocess = (e) => {
-        const inputData = e.inputBuffer.getChannelData(0);
-        const pcm16 = new Int16Array(inputData.length);
-        let sumSquares = 0;
-        for (let i = 0; i < inputData.length; i++) {
-          const s = Math.max(-1, Math.min(1, inputData[i]));
-          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-          sumSquares += s * s;
-        }
+      // 1. Prefer modern AudioWorkletNode over deprecated ScriptProcessorNode
+      try {
+        await audioCtx.audioWorklet.addModule("/audio-recorder-worklet.js");
+        const workletNode = new AudioWorkletNode(audioCtx, "audio-recorder-processor");
+        workletNodeRef.current = workletNode;
 
-        const rms = Math.sqrt(sumSquares / inputData.length);
-        setRmsLevel(rms * 3.0);
+        workletNode.port.onmessage = (e) => {
+          const { pcm16, rms } = e.data;
+          setRmsLevel(rms * 3.0);
 
-        if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-          socketRef.current.send(pcm16.buffer);
-        }
-      };
+          if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+            socketRef.current.send(pcm16);
+          }
+        };
 
-      source.connect(processor);
-      processor.connect(audioCtx.destination);
+        source.connect(workletNode);
+        workletNode.connect(audioCtx.destination);
+      } catch (workletError) {
+        // Fallback for older browsers
+        const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+        processorRef.current = processor;
 
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        processor.onaudioprocess = (e) => {
+          const inputData = e.inputBuffer.getChannelData(0);
+          const pcm16 = new Int16Array(inputData.length);
+          let sumSquares = 0;
+          for (let i = 0; i < inputData.length; i++) {
+            const s = Math.max(-1, Math.min(1, inputData[i]));
+            pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+            sumSquares += s * s;
+          }
+
+          const rms = Math.sqrt(sumSquares / inputData.length);
+          setRmsLevel(rms * 3.0);
+
+          if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+            socketRef.current.send(pcm16.buffer);
+          }
+        };
+
+        source.connect(processor);
+        processor.connect(audioCtx.destination);
+      }
+
+      // Browser speech recognition for live speech-to-text
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         try {
           const recognition = new SpeechRecognition();
@@ -299,20 +403,20 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
           recognition.interimResults = false;
 
           const langMap: Record<string, string> = {
-            "Hindi": "hi-IN",
-            "Marathi": "mr-IN",
-            "Tamil": "ta-IN",
-            "Telugu": "te-IN",
-            "Kannada": "kn-IN",
-            "Malayalam": "ml-IN",
-            "Bengali": "bn-IN",
-            "Gujarati": "gu-IN",
-            "Punjabi": "pa-IN",
-            "Odia": "or-IN",
-            "Urdu": "ur-IN",
-            "Assamese": "as-IN",
-            "English": "en-IN",
-            "Hinglish": "hi-IN"
+            Hindi: "hi-IN",
+            Marathi: "mr-IN",
+            Tamil: "ta-IN",
+            Telugu: "te-IN",
+            Kannada: "kn-IN",
+            Malayalam: "ml-IN",
+            Bengali: "bn-IN",
+            Gujarati: "gu-IN",
+            Punjabi: "pa-IN",
+            Odia: "or-IN",
+            Urdu: "ur-IN",
+            Assamese: "as-IN",
+            English: "en-IN",
+            Hinglish: "hi-IN"
           };
           recognition.lang = langMap[activeLanguage] || "hi-IN";
 
@@ -325,13 +429,74 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
 
           recognition.onerror = (e: any) => {
             if (e.error !== "no-speech" && e.error !== "aborted") {
-              console.debug("Browser speech recognition notice:", e.error);
+              console.debug("Speech recognition notice:", e.error);
             }
           };
 
           recognition.start();
           recognitionRef.current = recognition;
         } catch (e) {}
+      }
+
+      // Trigger dynamic greeting from Kabir on starting live session if no messages yet
+      if (messages.length === 0) {
+        if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+          socketRef.current.send(
+            JSON.stringify({
+              type: "START_SESSION",
+              customer_name: customerName || "there",
+              language: activeLanguageRef.current
+            })
+          );
+        } else {
+          // If WebSocket is not ready, fetch dynamic greeting via REST immediately
+          (async () => {
+            try {
+              const res = await fetch("/api/live/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  message: `Please give a warm, dynamic, non-static spoken greeting to ${customerName || "there"} as Kabir, introducing yourself as Mahindra's AI Showroom Specialist.`,
+                  session_id: sessionIdRef.current,
+                  language: activeLanguageRef.current
+                })
+              });
+              if (res.ok) {
+                const data = await res.json();
+                const detectedLang = data.language || activeLanguageRef.current;
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: Date.now().toString(),
+                    speaker: "mia",
+                    text: data.message,
+                    timestamp: new Date().toLocaleTimeString(),
+                    toolCall: data.tool_call,
+                    language: detectedLang
+                  }
+                ]);
+
+                if (typeof window !== "undefined" && "speechSynthesis" in window) {
+                  try {
+                    window.speechSynthesis.cancel();
+                    const utterance = new SpeechSynthesisUtterance(data.message);
+                    utterance.lang = (detectedLang === "English" || detectedLang === "en-IN") ? "en-IN" : "hi-IN";
+                    utterance.rate = 1.02;
+                    utterance.pitch = 1.0;
+                    utterance.onstart = () => setRmsLevel(0.45);
+                    utterance.onend = () => setRmsLevel(0);
+                    utterance.onerror = () => setRmsLevel(0);
+                    window.speechSynthesis.speak(utterance);
+                  } catch (ttsErr) {
+                    console.debug("TTS notice:", ttsErr);
+                  }
+                }
+              }
+            } catch (err) {
+              console.debug("Initial greeting REST notice:", err);
+            }
+          })();
+        }
       }
 
       setIsRecording(true);
@@ -341,8 +506,16 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
   };
 
   const stopVoiceRecording = () => {
+    if (workletNodeRef.current) {
+      try {
+        workletNodeRef.current.disconnect();
+      } catch (e) {}
+      workletNodeRef.current = null;
+    }
     if (processorRef.current) {
-      processorRef.current.disconnect();
+      try {
+        processorRef.current.disconnect();
+      } catch (e) {}
       processorRef.current = null;
     }
     if (mediaStreamRef.current) {
@@ -350,7 +523,9 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
       mediaStreamRef.current = null;
     }
     if (audioContextRef.current) {
-      audioContextRef.current.close();
+      try {
+        audioContextRef.current.close();
+      } catch (e) {}
       audioContextRef.current = null;
     }
     if (recognitionRef.current) {
@@ -358,6 +533,18 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
         recognitionRef.current.stop();
       } catch (e) {}
       recognitionRef.current = null;
+    }
+    if (socketRef.current) {
+      try {
+        if (socketRef.current.readyState === WebSocket.OPEN) {
+          socketRef.current.send(JSON.stringify({ type: "END_CALL" }));
+        }
+        socketRef.current.close();
+      } catch (e) {}
+      socketRef.current = null;
+    }
+    if (audioOutputManagerRef.current) {
+      audioOutputManagerRef.current.interrupt();
     }
     setIsRecording(false);
     setRmsLevel(0);

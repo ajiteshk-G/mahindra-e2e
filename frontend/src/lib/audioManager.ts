@@ -93,7 +93,26 @@ export class LiveVideoOutputManager {
 
     video.muted = false;
 
-    if ("MediaSource" in window && MediaSource.isTypeSupported(this.codec)) {
+    if ("MediaSource" in window) {
+      const candidateCodecs = [
+        'video/mp4; codecs="avc1.42c020, mp4a.40.2"',
+        'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
+        'video/mp4; codecs="avc1.4D401F"',
+        'video/mp4; codecs="avc1.64001E"',
+        'video/mp4',
+        'video/webm; codecs="vp8, opus"',
+        'video/webm; codecs="vp9, opus"',
+        'video/webm'
+      ];
+      let supportedCodec = this.codec;
+      for (const c of candidateCodecs) {
+        if (MediaSource.isTypeSupported(c)) {
+          supportedCodec = c;
+          break;
+        }
+      }
+      this.codec = supportedCodec;
+
       this.mediaSource = new MediaSource();
       video.src = URL.createObjectURL(this.mediaSource);
 

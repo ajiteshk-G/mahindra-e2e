@@ -80,12 +80,23 @@ export function Header({
           {onOpenAvatar && (
             <button
               onClick={onOpenAvatar}
-              className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 border border-slate-700 shadow-xs transition-all hover:scale-102"
-              title="Talk to Kabir AI Specialist"
+              className="bg-slate-900 hover:bg-slate-800 text-white pl-1.5 pr-3.5 py-1 rounded-full text-xs font-bold flex items-center gap-2 border border-slate-700 shadow-xs transition-all hover:scale-102 cursor-pointer group"
+              title="Talk to Kabir AI Specialist (Gemini Live)"
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Talk to Kabir</span>
+              <div className="relative w-6 h-6 rounded-full overflow-hidden border border-red-400 bg-slate-800 shrink-0">
+                <img
+                  src="/avatars/jay.png"
+                  alt="Kabir Avatar"
+                  className="w-full h-full object-cover object-[50%_15%]"
+                />
+                <span className="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              </div>
+              <span className="flex items-center gap-1.5">
+                <span>Talk to Kabir</span>
+                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-red-600/30 text-red-300 font-mono border border-red-500/40 uppercase">
+                  Live
+                </span>
+              </span>
             </button>
           )}
 
