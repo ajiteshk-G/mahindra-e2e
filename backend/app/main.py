@@ -24,9 +24,14 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         
-    # Seed default customer
+    # Seed default customer and dealerships
     async with AsyncSessionLocal() as db:
         await CustomerService.get_or_create_default_customer(db)
+        try:
+            from seeds.seed_dealerships import seed_dealerships
+            await seed_dealerships()
+        except Exception as e:
+            pass
         
     yield
     await engine.dispose()

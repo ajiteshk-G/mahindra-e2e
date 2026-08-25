@@ -393,10 +393,11 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
         processor.connect(audioCtx.destination);
       }
 
-      // Browser speech recognition for live speech-to-text
+      // Browser speech recognition for live speech-to-text ONLY during REST fallback (when WebSocket is not open)
+      const isWsActive = socketRef.current && socketRef.current.readyState === WebSocket.OPEN;
       const SpeechRecognition =
         (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
+      if (!isWsActive && SpeechRecognition) {
         try {
           const recognition = new SpeechRecognition();
           recognition.continuous = true;
@@ -421,8 +422,12 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
           recognition.lang = langMap[activeLanguage] || "hi-IN";
 
           recognition.onresult = (event: any) => {
+            // Guard: Ignore microphone input if Kabir is actively speaking through TTS
+            if (typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.speaking) {
+              return;
+            }
             const transcript = event.results[event.results.length - 1][0].transcript;
-            if (transcript.trim()) {
+            if (transcript && transcript.trim()) {
               sendTextMessage(transcript.trim());
             }
           };

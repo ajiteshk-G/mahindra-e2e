@@ -66,6 +66,18 @@ export default function Home() {
     const args = event.tool_args || event.args || {};
     const rawCar = args.car_name || args.vehicle_id || args.model_of_interest || args.model_name || "";
 
+    if (toolName === "book_test_drive") {
+      setIsChatOpen(true);
+      if (rawCar) {
+        const normId = normalizeToVehicleId(rawCar);
+        const matched = vehicles.find((v) => v.id === normId || v.name.toLowerCase().includes(rawCar.toLowerCase()));
+        if (matched) {
+          setSelectedVehicleId(matched.id);
+        }
+      }
+      return;
+    }
+
     if (toolName === "show_vehicle_spotlight" || toolName === "switch_vehicle_showroom" || rawCar) {
       const normId = normalizeToVehicleId(rawCar || selectedVehicleId);
       const matched = vehicles.find((v) => v.id === normId || v.name.toLowerCase().includes(rawCar.toLowerCase()));
@@ -256,6 +268,7 @@ export default function Home() {
             }}
             initialCustomerName={profile?.name}
             initialCustomerPhone={profile?.phone}
+            activeVehicleId={selectedVehicleId}
           />
         </div>
       )}

@@ -227,11 +227,30 @@ async def live_audio_websocket(websocket: WebSocket):
                                     },
                                     {
                                         "name": "book_test_drive",
-                                        "description": "Call this tool when customer wants to book a test drive.",
+                                        "description": "Call this tool when customer wants to schedule or book a test drive for a specific vehicle model and variant.",
                                         "parameters": {
                                             "type": "object",
                                             "properties": {
-                                                "model_name": {"type": "string"}
+                                                "model_name": {
+                                                    "type": "string",
+                                                    "description": "The normalized vehicle ID: thar_roxx, scorpio_n, xuv700, be_6e, xev_9e, xuv_3xo, thar_3door, scorpio_classic"
+                                                },
+                                                "variant": {
+                                                    "type": "string",
+                                                    "description": "Specific variant name e.g. AX7L Diesel AT 4x4, Z8L 4WD AT, Pack Two (79 kWh)"
+                                                },
+                                                "transmission": {
+                                                    "type": "string",
+                                                    "description": "Automatic or Manual"
+                                                },
+                                                "booking_type": {
+                                                    "type": "string",
+                                                    "description": "HOME_DOORSTEP or SHOWROOM_VISIT"
+                                                },
+                                                "pin_code": {
+                                                    "type": "string",
+                                                    "description": "Area 6-digit PIN code"
+                                                }
                                             },
                                             "required": ["model_name"]
                                         }

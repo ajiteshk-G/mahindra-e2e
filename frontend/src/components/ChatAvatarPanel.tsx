@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { LiveMessage } from "@/hooks/useLiveVoice";
 import { AvatarVideoPlayer } from "./AvatarVideoPlayer";
+import { TestDriveChatCalendar } from "./TestDriveChatCalendar";
 import {
   Power,
   PhoneOff,
@@ -21,7 +22,8 @@ import {
   Phone,
   CheckCircle2,
   AlertCircle,
-  Edit3
+  Edit3,
+  Calendar
 } from "lucide-react";
 
 interface ChatAvatarPanelProps {
@@ -36,6 +38,7 @@ interface ChatAvatarPanelProps {
   onClose?: () => void;
   initialCustomerName?: string;
   initialCustomerPhone?: string;
+  activeVehicleId?: string;
 }
 
 export function ChatAvatarPanel({
@@ -48,7 +51,8 @@ export function ChatAvatarPanel({
   onSwitchLanguage,
   onClose,
   initialCustomerName = "",
-  initialCustomerPhone = ""
+  initialCustomerPhone = "",
+  activeVehicleId = "thar_roxx"
 }: ChatAvatarPanelProps) {
   const [name, setName] = useState(initialCustomerName || "");
   const [phone, setPhone] = useState(initialCustomerPhone || "");
@@ -56,6 +60,25 @@ export function ChatAvatarPanel({
   const [phoneError, setPhoneError] = useState("");
   const [touched, setTouched] = useState({ name: false, phone: false });
   const [isVerified, setIsVerified] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+
+  // Auto open calendar on test drive intent
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      const lower = (lastMsg.text || "").toLowerCase();
+      if (
+        lastMsg.toolCall === "book_test_drive" ||
+        lastMsg.toolCall === "open_test_drive_booking" ||
+        lower.includes("test drive") ||
+        lower.includes("test ride") ||
+        lower.includes("book drive") ||
+        lower.includes("book a test")
+      ) {
+        setShowCalendar(true);
+      }
+    }
+  }, [messages]);
 
   // Regex patterns
   const NAME_REGEX = /^[a-zA-Z\s.']{2,50}$/;
@@ -547,6 +570,15 @@ export function ChatAvatarPanel({
             </p>
             <div className="suggested-questions">
               <button
+                className="suggestion-chip bg-red-600/20 text-red-300 border-red-500/40 font-bold"
+                onClick={() => {
+                  setShowCalendar(true);
+                  onSendMessage("I would like to check available slots and book a test drive for Thar ROXX.");
+                }}
+              >
+                📅 Book Test Ride (Live Slots)
+              </button>
+              <button
                 className="suggestion-chip"
                 onClick={() =>
                   askQuickPrompt("Tell me about the new Thar ROXX 5-door SUV")
@@ -619,9 +651,37 @@ export function ChatAvatarPanel({
               </div>
             );
           })}
+
+          {/* Interactive Test Drive Calendar & Live Database Slots Card */}
+          {showCalendar && (
+            <TestDriveChatCalendar
+              vehicleId={activeVehicleId}
+              customerName={name || initialCustomerName || "Kunal Mathuria"}
+              customerPhone={phone || initialCustomerPhone || "+91 98196 57034"}
+              onSlotBooked={(booking) => {
+                onSendMessage(
+                  `I have successfully booked the ${booking.vehicle_name} (${booking.variant || ""}) test drive for ${booking.slot_date} at ${booking.slot_time}. Reference: ${booking.booking_reference}.`
+                );
+              }}
+              onClose={() => setShowCalendar(false)}
+            />
+          )}
         </div>
 
-        <div className="chat-input-bar">
+        <div className="chat-input-bar flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setShowCalendar((prev) => !prev)}
+            className={`p-2 rounded-xl border transition-all text-xs flex items-center justify-center shrink-0 ${
+              showCalendar
+                ? "bg-red-600 text-white border-red-400 shadow-[0_0_10px_rgba(227,24,55,0.5)]"
+                : "bg-white/5 border-white/10 text-slate-300 hover:text-white hover:border-cyan-400/50"
+            }`}
+            title="Open Test Drive Calendar & Available Slots"
+          >
+            <Calendar className="w-4 h-4 text-cyan-400" />
+          </button>
+
           <input
             type="text"
             id="text-message"

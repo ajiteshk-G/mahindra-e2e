@@ -25,11 +25,73 @@ def clean_phone(phone_str: str) -> str:
 
 class CustomerService:
     @staticmethod
-    async def get_or_create_default_customer(db: AsyncSession) -> Customer:
-        """Retrieves default demo customer (Aarav Sharma) or initializes them."""
+    async def get_or_create_customer_by_phone(
+        db: AsyncSession,
+        phone: str,
+        name: Optional[str] = None,
+        vehicle_id: str = "thar_roxx"
+    ) -> Customer:
+        """Retrieves customer dynamically by their entered phone number or registers them."""
+        normalized_phone = clean_phone(phone)
+        digits = re.sub(r"\D", "", phone)
+        cust_slug = f"CUST-{digits[-10:] if len(digits) >= 10 else (digits or uuid.uuid4().hex[:8])}"
+
         stmt = (
             select(Customer)
-            .where(Customer.phone == "+919820155432")
+            .where(
+                (Customer.phone == normalized_phone) |
+                (Customer.phone == phone) |
+                (Customer.customer_id == cust_slug)
+            )
+            .options(
+                selectinload(Customer.sessions).selectinload(ConversationSession.transcripts),
+                selectinload(Customer.interactions),
+                selectinload(Customer.bookings),
+                selectinload(Customer.claims),
+                selectinload(Customer.telematics_alerts)
+            )
+        )
+        result = await db.execute(stmt)
+        customer = result.scalars().first()
+
+        if customer:
+            if name and name.strip() and customer.name in ["Valued Customer", "Guest"]:
+                customer.name = name.strip()
+                await db.commit()
+            return customer
+
+        # Create new customer with the entered phone and name
+        customer = Customer(
+            customer_id=cust_slug,
+            name=name.strip() if name and name.strip() else "Valued Customer",
+            phone=normalized_phone,
+            email=f"{cust_slug.lower()}@customer.mahindra.com",
+            city="Mumbai",
+            preferred_language="Hinglish",
+            current_phase="PRE_SALES",
+            interested_vehicle_id=vehicle_id or "thar_roxx",
+            interested_variant="AX7L Diesel AT 4x4",
+            budget_range="₹18 Lakh - ₹25 Lakh",
+            kyc_status="PENDING"
+        )
+        db.add(customer)
+        await db.commit()
+        await db.refresh(customer)
+        return customer
+
+    @staticmethod
+    async def get_or_create_default_customer(
+        db: AsyncSession,
+        phone: Optional[str] = None,
+        name: Optional[str] = None
+    ) -> Customer:
+        """Retrieves customer by entered phone or demo default."""
+        if phone:
+            return await CustomerService.get_or_create_customer_by_phone(db, phone=phone, name=name)
+
+        # Fallback to demo profile
+        stmt = (
+            select(Customer)
             .options(
                 selectinload(Customer.sessions).selectinload(ConversationSession.transcripts),
                 selectinload(Customer.interactions),
