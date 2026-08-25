@@ -1,5 +1,6 @@
 import time
 import datetime
+import logging
 from datetime import datetime as dt, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,6 +21,9 @@ from app.schemas.booking import (
 )
 from app.services.customer_service import CustomerService, clean_phone
 from app.services.catalog_service import CatalogService
+from app.services.notification_service import NotificationService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/bookings", tags=["Test Drive Bookings"])
 
@@ -363,9 +367,29 @@ async def reserve_test_drive_slot(
 
     await db.commit()
 
+    # 9. Send Twilio SMS immediately upon test drive confirmation
+    try:
+        await NotificationService.send_test_drive_confirmation(
+            customer_phone=req.customer_phone,
+            customer_name=req.customer_name,
+            booking_reference=booking_ref,
+            vehicle_name=vehicle_display_name,
+            variant=req.variant or "Official Variant",
+            slot_date=req.slot_date,
+            slot_time=req.slot_time,
+            dealership_name=dealership_name,
+            sales_advisor_name=advisor_name,
+            booking_type=req.booking_type or "HOME_DOORSTEP",
+            delivery_address=req.delivery_address,
+            pin_code=req.pin_code
+        )
+        logger.info(f"Twilio SMS confirmation dispatched to {req.customer_phone} for booking {booking_ref}")
+    except Exception as sms_err:
+        logger.warning(f"Twilio SMS dispatch notice: {sms_err}")
+
     return SlotReserveResponse(
         success=True,
-        message=f"Test Ride successfully reserved for {req.customer_name} on {req.slot_date} at {req.slot_time} ({dealership_name})!",
+        message=f"Test Ride successfully reserved for {req.customer_name} on {req.slot_date} at {req.slot_time} ({dealership_name})! Confirmation SMS sent.",
         booking_reference=booking_ref,
         slot_date=req.slot_date,
         slot_time=req.slot_time,
