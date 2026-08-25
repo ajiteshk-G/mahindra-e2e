@@ -546,8 +546,30 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
     if (audioOutputManagerRef.current) {
       audioOutputManagerRef.current.interrupt();
     }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {}
+    }
+    const video = typeof document !== "undefined" ? (document.getElementById("video_player") as HTMLVideoElement | null) : null;
+    if (video) {
+      try {
+        video.pause();
+        video.currentTime = 0;
+      } catch (e) {}
+    }
     setIsRecording(false);
     setRmsLevel(0);
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `end-${Date.now()}`,
+        speaker: "system",
+        text: "Voice consultation ended.",
+        timestamp: new Date().toLocaleTimeString()
+      }
+    ]);
   };
 
   const switchLanguage = (lang: string) => {

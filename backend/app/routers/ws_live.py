@@ -264,7 +264,10 @@ async def live_audio_websocket(websocket: WebSocket):
                             if "text" in data and data["text"]:
                                 payload = json.loads(data["text"])
                                 msg_type = payload.get("type", "USER_CHAT")
-                                if msg_type == "START_SESSION":
+                                if msg_type == "END_CALL" or msg_type == "STOP_SESSION":
+                                    logger.info(f"Client requested end of call for session {session_id}")
+                                    break
+                                elif msg_type == "START_SESSION":
                                     cust_name = payload.get("customer_name") or customer.name or "there"
                                     greeting_turn = {
                                         "clientContent": {
