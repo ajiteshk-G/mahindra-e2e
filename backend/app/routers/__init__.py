@@ -8,6 +8,7 @@ from app.routers.telematics import router as telematics_router
 from app.routers.sales_recording import router as sales_router
 from app.routers.outbound_call import router as outbound_router
 from app.routers.financing import router as financing_router
+from app.routers.admin import router as admin_router
 from app.routers.ws_live import router as ws_router
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "sales_router",
     "outbound_router",
     "financing_router",
+    "admin_router",
     "ws_router"
 ]

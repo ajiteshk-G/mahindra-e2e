@@ -15,6 +15,7 @@ from app.routers import (
     sales_router,
     outbound_router,
     financing_router,
+    admin_router,
     ws_router
 )
 
@@ -63,6 +64,7 @@ app.include_router(telematics_router, prefix=settings.API_V1_STR)
 app.include_router(sales_router, prefix=settings.API_V1_STR)
 app.include_router(outbound_router, prefix=settings.API_V1_STR)
 app.include_router(financing_router, prefix=settings.API_V1_STR)
+app.include_router(admin_router, prefix=settings.API_V1_STR)
 app.include_router(ws_router)
 
 @app.get("/")

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { CustomerProfile } from "@/types";
 import {
   Sparkles,
@@ -9,7 +10,8 @@ import {
   CreditCard,
   Zap,
   UserCheck,
-  MessageSquare
+  MessageSquare,
+  ShieldCheck
 } from "lucide-react";
 
 interface HeaderProps {
@@ -74,16 +76,26 @@ export function Header({
           })}
         </nav>
 
-        {/* Right Action Controls: Direct Avatar Launch Button + Logged-in Profile (if identified) */}
-        <div className="flex items-center gap-2.5">
+        {/* Right Action Controls: Direct Avatar Launch Button + Admin Link + Logged-in Profile */}
+        <div className="flex items-center gap-2">
+          {/* Admin Portal Button */}
+          <Link
+            href="/admin"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 text-xs font-bold transition-all shadow-xs group"
+            title="Open Mahindra Test Rides & Transcripts Admin Portal"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-red-500 group-hover:scale-110 transition-transform" />
+            <span className="hidden sm:inline">Admin Portal</span>
+          </Link>
+
           {/* Talk to Kabir Primary CTA */}
           {onOpenAvatar && (
             <button
               onClick={onOpenAvatar}
-              className="bg-slate-900 hover:bg-slate-800 text-white pl-1.5 pr-3.5 py-1 rounded-full text-xs font-bold flex items-center gap-2 border border-slate-700 shadow-xs transition-all hover:scale-102 cursor-pointer group"
+              className="bg-red-600 hover:bg-red-700 text-white pl-1.5 pr-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 shadow-xs transition-all hover:scale-102 cursor-pointer group"
               title="Talk to Kabir AI Specialist (Gemini Live)"
             >
-              <div className="relative w-6 h-6 rounded-full overflow-hidden border border-red-400 bg-slate-800 shrink-0">
+              <div className="relative w-6 h-6 rounded-full overflow-hidden border border-white/40 bg-slate-800 shrink-0">
                 <img
                   src="/avatars/jay.png"
                   alt="Kabir Avatar"
@@ -93,7 +105,7 @@ export function Header({
               </div>
               <span className="flex items-center gap-1.5">
                 <span>Talk to Kabir</span>
-                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-red-600/30 text-red-300 font-mono border border-red-500/40 uppercase">
+                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-black/40 text-red-200 font-mono uppercase font-bold">
                   Live
                 </span>
               </span>
