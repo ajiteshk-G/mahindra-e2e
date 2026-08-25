@@ -33,6 +33,10 @@ export interface TranscriptTurn {
   role?: string;
   message: string;
   timestamp?: string;
+  date?: string;
+  full_date?: string;
+  time?: string;
+  channel?: string;
   intent?: string;
   tool?: string;
 }
@@ -535,46 +539,100 @@ export function AdminBookingsTable() {
             {/* Modal Body */}
             <div className="p-5 overflow-y-auto flex-1 space-y-4">
               {activeTranscriptTab === "presales" ? (
-                <div className="space-y-3">
-                  <div className="p-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/20 text-xs text-cyan-200 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <span>
-                      Live transcript between customer <strong>{activeModalBooking.customer_name}</strong> and <strong>Kabir (Mahindra AI Showroom Specialist)</strong>.
+                <div className="space-y-4">
+                  <div className="p-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/20 text-xs text-cyan-200 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
+                      <span>
+                        Live transcript for <strong>{activeModalBooking.customer_name}</strong> ({activeModalBooking.customer_phone}) with <strong>Kabir (AI Specialist)</strong>.
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-mono bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-lg border border-cyan-500/30 font-bold shrink-0">
+                      {activeModalBooking.presales_transcript.length} turns
                     </span>
                   </div>
 
-                  <div className="space-y-2.5">
-                    {activeModalBooking.presales_transcript.map((turn, idx) => {
-                      const isUser = turn.role === "customer" || turn.speaker.toLowerCase().includes("customer");
+                  {/* Grouped Transcripts by Date/Time */}
+                  {(() => {
+                    // Group turns by date
+                    const groups: { [dateKey: string]: TranscriptTurn[] } = {};
+                    activeModalBooking.presales_transcript.forEach((turn) => {
+                      const key = turn.full_date || turn.date || "Conversation Session";
+                      if (!groups[key]) groups[key] = [];
+                      groups[key].push(turn);
+                    });
+
+                    const groupEntries = Object.entries(groups);
+
+                    if (groupEntries.length === 0) {
                       return (
-                        <div
-                          key={idx}
-                          className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}
-                        >
-                          <div className="flex items-center gap-1.5 mb-0.5 text-[10px] text-slate-400">
-                            <span className={`font-bold ${isUser ? "text-cyan-400" : "text-amber-400"}`}>
-                              {turn.speaker}
-                            </span>
-                            {turn.timestamp && <span className="font-mono">• {turn.timestamp}</span>}
-                          </div>
-                          <div
-                            className={`p-3 rounded-2xl max-w-[85%] text-xs leading-relaxed ${
-                              isUser
-                                ? "bg-cyan-600/20 border border-cyan-500/40 text-cyan-100 rounded-tr-xs"
-                                : "bg-black/60 border border-white/15 text-slate-200 rounded-tl-xs"
-                            }`}
-                          >
-                            <p>{turn.message}</p>
-                            {turn.tool && (
-                              <div className="mt-1.5 pt-1 border-t border-white/10 text-[9px] text-amber-300 font-mono flex items-center gap-1">
-                                <span>⚡ Triggered: {turn.tool}</span>
-                              </div>
-                            )}
-                          </div>
+                        <div className="py-8 text-center text-slate-400">
+                          <p>No conversation transcripts recorded yet.</p>
                         </div>
                       );
-                    })}
-                  </div>
+                    }
+
+                    return groupEntries.map(([dateKey, turns], groupIdx) => (
+                      <div key={groupIdx} className="space-y-3 pt-1">
+                        {/* Date Group Divider */}
+                        <div className="flex items-center gap-3 my-2">
+                          <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-[11px] font-bold text-cyan-300 shadow-md">
+                            <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>{dateKey}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              ({turns.length} message{turns.length !== 1 ? "s" : ""})
+                            </span>
+                          </div>
+                          <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
+                        </div>
+
+                        {/* Turns in this Date Group */}
+                        <div className="space-y-2.5">
+                          {turns.map((turn, idx) => {
+                            const isUser = turn.role === "customer" || turn.speaker.toLowerCase().includes("customer");
+                            return (
+                              <div
+                                key={idx}
+                                className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}
+                              >
+                                <div className="flex items-center gap-1.5 mb-1 text-[10px] text-slate-400 px-1">
+                                  <span className={`font-bold ${isUser ? "text-cyan-400" : "text-amber-400"}`}>
+                                    {turn.speaker}
+                                  </span>
+                                  {(turn.time || turn.timestamp) && (
+                                    <span className="font-mono text-slate-500 flex items-center gap-0.5">
+                                      <Clock className="w-2.5 h-2.5 inline" />
+                                      {turn.time || turn.timestamp}
+                                    </span>
+                                  )}
+                                  {turn.channel && (
+                                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/5 border border-white/10 text-slate-400 font-mono">
+                                      {turn.channel}
+                                    </span>
+                                  )}
+                                </div>
+                                <div
+                                  className={`p-3.5 rounded-2xl max-w-[85%] text-xs leading-relaxed shadow-sm ${
+                                    isUser
+                                      ? "bg-cyan-600/20 border border-cyan-500/40 text-cyan-100 rounded-tr-xs"
+                                      : "bg-black/60 border border-white/15 text-slate-200 rounded-tl-xs"
+                                  }`}
+                                >
+                                  <p>{turn.message}</p>
+                                  {turn.tool && (
+                                    <div className="mt-2 pt-1.5 border-t border-white/10 text-[9.5px] text-amber-300 font-mono flex items-center gap-1">
+                                      <span>⚡ Tool Action: {turn.tool}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
                 </div>
               ) : (
                 <div className="space-y-4">

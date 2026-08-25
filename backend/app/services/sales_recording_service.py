@@ -14,6 +14,7 @@ from app.schemas.sales_recording import (
 )
 
 from app.services.catalog_service import CatalogService
+from app.services.customer_service import clean_phone
 
 UPLOAD_DIR = "/tmp/mahindra_test_rides"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -32,8 +33,12 @@ DEFAULT_TEST_RIDE_TRANSCRIPT = """[00:08] Advisor Rajesh: "Namaste Aarav ji! Wel
 class SalesRecordingService:
     @staticmethod
     async def get_sales_leads(db: AsyncSession, dealership_id: Optional[str] = None) -> List[TestRideLeadItem]:
-        """Fetch qualified leads from bookings and CRM filtered by showroom for the Sales Mobile App."""
-        # 1. Query test drive bookings
+        """
+        Fetch qualified leads for the Sales Mobile App.
+        Strictly 1 lead row per unique customer (identified by unique normalized phone number).
+        Shows the customer's latest active test ride booking.
+        """
+        # 1. Query test drive bookings ordered by latest first
         booking_stmt = select(TestDriveBooking).order_by(TestDriveBooking.created_at.desc())
         if dealership_id and dealership_id.strip() and dealership_id.strip() != "ALL":
             booking_stmt = booking_stmt.where(
@@ -44,15 +49,12 @@ class SalesRecordingService:
         bookings = booking_res.scalars().all()
 
         leads: List[TestRideLeadItem] = []
-        booked_customer_ids = set()
+        seen_phones = set()
 
         for b in bookings:
             cust_stmt = select(Customer).where(Customer.id == b.customer_id)
             c_res = await db.execute(cust_stmt)
             c = c_res.scalars().first()
-
-            v_info = CatalogService.get_vehicle_by_id(b.vehicle_id)
-            veh_name = v_info.name if v_info else b.vehicle_id.replace("_", " ").title()
 
             cust_name = c.name if c else "Valued Customer"
             cust_phone = c.phone if c else ""
@@ -60,8 +62,15 @@ class SalesRecordingService:
             cust_city = c.city if c else "Mumbai"
             cust_id_str = c.customer_id if c else f"CUST-{b.customer_id}"
 
-            if c:
-                booked_customer_ids.add(c.id)
+            norm_phone = clean_phone(cust_phone) if cust_phone else f"NOPHONE-{b.customer_id}"
+            
+            # Deduplicate by unique phone - only 1 row per unique customer
+            if norm_phone in seen_phones:
+                continue
+            seen_phones.add(norm_phone)
+
+            v_info = CatalogService.get_vehicle_by_id(b.vehicle_id)
+            veh_name = v_info.name if v_info else b.vehicle_id.replace("_", " ").title()
 
             leads.append(TestRideLeadItem(
                 customer_id=cust_id_str,
@@ -82,13 +91,15 @@ class SalesRecordingService:
                 presales_notes=f"Test drive booked for {veh_name} ({b.variant}) at {b.dealership_name}. Booking Ref: {b.booking_reference}."
             ))
 
-        # 2. If no filter or empty, also include qualified pre-sales inquiry customers
+        # 2. If no dealership filter or "ALL", also include other unique inquiry customers not yet in list
         if not dealership_id or dealership_id == "ALL":
             cust_stmt = select(Customer).order_by(Customer.updated_at.desc()).limit(10)
             cust_res = await db.execute(cust_stmt)
             customers = cust_res.scalars().all()
             for c in customers:
-                if c.id not in booked_customer_ids:
+                norm_phone = clean_phone(c.phone) if c.phone else f"NOPHONE-{c.id}"
+                if norm_phone not in seen_phones:
+                    seen_phones.add(norm_phone)
                     v_info = CatalogService.get_vehicle_by_id(c.interested_vehicle_id or "thar_roxx")
                     veh_name = v_info.name if v_info else "Mahindra Thar ROXX"
                     leads.append(TestRideLeadItem(

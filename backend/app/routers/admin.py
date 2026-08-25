@@ -12,6 +12,7 @@ from app.models.customer import Customer, InteractionLog, ConversationSession
 from app.models.sales_ride import TestRideRecording
 from app.models.dealership import Dealership
 from app.services.catalog_service import CatalogService
+from app.services.customer_service import clean_phone
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +30,11 @@ async def get_admin_bookings(
 ):
     """
     Returns comprehensive booking records with dual transcripts:
+    Strictly 1 row per unique Customer (identified by Unique Phone Number).
     1. Pre-Sales Transcript (Chat/Voice with Kabir in Showroom)
     2. Test Ride Transcript (In-Vehicle Test Drive with Sales Advisor)
     """
-    # 1. Fetch all bookings with customer
+    # 1. Fetch all bookings with customer ordered latest first
     stmt = (
         select(TestDriveBooking)
         .options(selectinload(TestDriveBooking.customer))
@@ -41,31 +43,27 @@ async def get_admin_bookings(
     result = await db.execute(stmt)
     bookings = result.scalars().all()
 
-    # 2. Also fetch all test drive slots to ensure any reserved slots are captured
-    slot_stmt = (
-        select(TestDriveSlot)
-        .where(TestDriveSlot.status == "RESERVED")
-        .order_by(desc(TestDriveSlot.reserved_at))
-    )
-    slot_res = await db.execute(slot_stmt)
-    reserved_slots = slot_res.scalars().all()
-
-    # Map existing booking refs
-    existing_refs = {b.booking_reference for b in bookings}
-
     admin_records = []
+    seen_customer_phones = set()
 
     # Preload all dealerships into a city map
     dealer_res = await db.execute(select(Dealership))
     dealers = dealer_res.scalars().all()
     dealer_city_map = {d.id: d.city for d in dealers}
 
-    # Process confirmed bookings
+    # Process confirmed bookings (1 row per unique customer phone)
     for b in bookings:
         cust = b.customer
         cust_id = cust.id if cust else None
         cust_name = cust.name if cust else "Valued Customer"
         cust_phone = cust.phone if cust else ""
+        norm_phone = clean_phone(cust_phone) if cust_phone else f"NOPHONE-{b.id}"
+
+        # Deduplicate: exactly 1 row per unique customer phone
+        if norm_phone in seen_customer_phones:
+            continue
+        seen_customer_phones.add(norm_phone)
+
         dealership_city = dealer_city_map.get(b.dealership_id, cust.city if cust else "Mumbai")
         cust_city = dealership_city or (cust.city if cust else "Mumbai")
 
@@ -84,6 +82,7 @@ async def get_admin_bookings(
             logs = i_res.scalars().all()
             for log in logs:
                 speaker_label = "Customer" if log.speaker == "customer" else "Kabir (AI Specialist)"
+                dt = log.created_at
                 presales_turns.append({
                     "id": log.id,
                     "speaker": speaker_label,
@@ -92,25 +91,35 @@ async def get_admin_bookings(
                     "channel": log.channel,
                     "intent": log.extracted_intent,
                     "tool": log.tool_triggered,
-                    "timestamp": log.created_at.strftime("%I:%M %p, %d %b") if log.created_at else ""
+                    "date": dt.strftime("%d %b %Y") if dt else "Today",
+                    "full_date": dt.strftime("%A, %d %B %Y") if dt else "Today",
+                    "time": dt.strftime("%I:%M %p") if dt else "",
+                    "timestamp": dt.strftime("%I:%M %p, %d %b %Y") if dt else ""
                 })
 
         # Fallback pre-sales transcript if turn logs are sparse
         if not presales_turns:
+            b_dt = b.created_at
             presales_turns = [
                 {
                     "id": 1,
                     "speaker": "Customer",
                     "role": "customer",
                     "message": f"Namaste Kabir, I would like to schedule a test ride for {b.vehicle_id.replace('_', ' ').title()}.",
-                    "timestamp": b.created_at.strftime("%I:%M %p, %d %b") if b.created_at else "Just now"
+                    "date": b_dt.strftime("%d %b %Y") if b_dt else "Today",
+                    "full_date": b_dt.strftime("%A, %d %B %Y") if b_dt else "Today",
+                    "time": b_dt.strftime("%I:%M %p") if b_dt else "Just now",
+                    "timestamp": b_dt.strftime("%I:%M %p, %d %b %Y") if b_dt else "Just now"
                 },
                 {
                     "id": 2,
                     "speaker": "Kabir (AI Specialist)",
                     "role": "mia",
                     "message": f"Bahut badhiya {cust_name}! I have arranged your test drive for {b.variant} at {b.dealership_name} on {b.scheduled_date} at {b.scheduled_time_slot}.",
-                    "timestamp": b.created_at.strftime("%I:%M %p, %d %b") if b.created_at else "Just now"
+                    "date": b_dt.strftime("%d %b %Y") if b_dt else "Today",
+                    "full_date": b_dt.strftime("%A, %d %B %Y") if b_dt else "Today",
+                    "time": b_dt.strftime("%I:%M %p") if b_dt else "Just now",
+                    "timestamp": b_dt.strftime("%I:%M %p, %d %b %Y") if b_dt else "Just now"
                 }
             ]
 
