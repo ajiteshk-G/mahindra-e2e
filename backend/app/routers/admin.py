@@ -72,6 +72,7 @@ async def get_admin_bookings(
         if cust_id:
             i_stmt = (
                 select(InteractionLog)
+                .options(selectinload(InteractionLog.session))
                 .where(
                     InteractionLog.customer_id == cust_id,
                     InteractionLog.channel != "TEST_RIDE_IN_VEHICLE"
@@ -83,8 +84,19 @@ async def get_admin_bookings(
             for log in logs:
                 speaker_label = "Customer" if log.speaker == "customer" else "Kabir (AI Specialist)"
                 dt = log.created_at
+                sess = log.session
+                sess_uid = sess.session_id if sess else f"SESS-{dt.strftime('%Y%m%d-%H%M') if dt else 'HISTORIC'}"
+                sess_type = sess.session_type if sess else ("LIVE_VOICE" if log.channel == "VOICE_LIVE" else "CHAT_BOT")
+                sess_veh = (sess.vehicle_id if sess and sess.vehicle_id else b.vehicle_id) or "thar_roxx"
+                v_obj = CatalogService.get_vehicle_by_id(sess_veh)
+                sess_veh_name = v_obj.name if v_obj else sess_veh.replace("_", " ").title()
+
                 presales_turns.append({
                     "id": log.id,
+                    "session_id": sess_uid,
+                    "session_type": sess_type,
+                    "vehicle_id": sess_veh,
+                    "vehicle_name": sess_veh_name,
                     "speaker": speaker_label,
                     "role": log.speaker,
                     "message": log.message,
@@ -103,9 +115,13 @@ async def get_admin_bookings(
             presales_turns = [
                 {
                     "id": 1,
+                    "session_id": f"SESS-{b.booking_reference}",
+                    "session_type": "LIVE_VOICE",
+                    "vehicle_id": b.vehicle_id,
+                    "vehicle_name": veh_name,
                     "speaker": "Customer",
                     "role": "customer",
-                    "message": f"Namaste Kabir, I would like to schedule a test ride for {b.vehicle_id.replace('_', ' ').title()}.",
+                    "message": f"Namaste Kabir, I would like to schedule a test ride for {veh_name}.",
                     "date": b_dt.strftime("%d %b %Y") if b_dt else "Today",
                     "full_date": b_dt.strftime("%A, %d %B %Y") if b_dt else "Today",
                     "time": b_dt.strftime("%I:%M %p") if b_dt else "Just now",
@@ -113,6 +129,10 @@ async def get_admin_bookings(
                 },
                 {
                     "id": 2,
+                    "session_id": f"SESS-{b.booking_reference}",
+                    "session_type": "LIVE_VOICE",
+                    "vehicle_id": b.vehicle_id,
+                    "vehicle_name": veh_name,
                     "speaker": "Kabir (AI Specialist)",
                     "role": "mia",
                     "message": f"Bahut badhiya {cust_name}! I have arranged your test drive for {b.variant} at {b.dealership_name} on {b.scheduled_date} at {b.scheduled_time_slot}.",
