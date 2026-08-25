@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
@@ -12,9 +12,12 @@ from app.services.sales_recording_service import SalesRecordingService
 router = APIRouter(prefix="/sales", tags=["Sales Advisor Mobile App & Test Ride"])
 
 @router.get("/leads", response_model=List[TestRideLeadItem])
-async def get_sales_leads(db: AsyncSession = Depends(get_db)):
-    """Fetch qualified leads from Pre-sales virtual showroom for the Sales Mobile App."""
-    return await SalesRecordingService.get_sales_leads(db)
+async def get_sales_leads(
+    dealership_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Fetch qualified leads from Pre-sales virtual showroom for the Sales Mobile App, optionally filtered by showroom."""
+    return await SalesRecordingService.get_sales_leads(db, dealership_id=dealership_id)
 
 @router.post("/test-ride/upload-recording", response_model=TestRideInsightResponse)
 async def upload_test_ride_recording(

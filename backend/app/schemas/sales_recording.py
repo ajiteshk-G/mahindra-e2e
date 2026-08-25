@@ -49,6 +49,13 @@ class TestRideLeadItem(BaseModel):
     email: Optional[str] = None
     city: str
     preferred_vehicle: str
+    vehicle_id: Optional[str] = "thar_roxx"
+    variant: Optional[str] = "AX7L Diesel AT 4x4"
+    booking_reference: Optional[str] = None
+    dealership_id: Optional[str] = None
+    dealership_name: Optional[str] = None
+    booking_type: Optional[str] = "HOME_DOORSTEP"
+    delivery_address: Optional[str] = None
     booking_status: str
     scheduled_slot: Optional[str] = None
     presales_notes: Optional[str] = None

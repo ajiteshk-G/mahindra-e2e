@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { VehicleItem, CustomerProfile, TestRideLeadItem, TestRideInsightResponse } from "@/types";
+import { VehicleItem, CustomerProfile, TestRideLeadItem, TestRideInsightResponse, DealershipItem } from "@/types";
 import {
   Smartphone,
   Mic,
@@ -22,9 +22,14 @@ import {
   FileText,
   Volume2,
   Share2,
-  Database
+  Database,
+  Building2,
+  MapPin,
+  RefreshCw,
+  ChevronRight,
+  Filter
 } from "lucide-react";
-import { fetchSalesLeads, uploadTestRideRecording } from "@/lib/api";
+import { fetchSalesLeads, uploadTestRideRecording, fetchDealerships } from "@/lib/api";
 
 interface SalesMobileAppProps {
   vehicles: VehicleItem[];
@@ -39,9 +44,16 @@ export function SalesMobileApp({
   selectedVehicleId = "thar_roxx",
   onProceedToOutboundCall
 }: SalesMobileAppProps) {
+  // Showrooms & Filtering
+  const [dealerships, setDealerships] = useState<DealershipItem[]>([]);
+  const [selectedShowroom, setSelectedShowroom] = useState<string>("ALL");
+  const [isLoadingLeads, setIsLoadingLeads] = useState<boolean>(false);
+
+  // Leads & Selected Test Ride
   const [leads, setLeads] = useState<TestRideLeadItem[]>([]);
   const [selectedLead, setSelectedLead] = useState<TestRideLeadItem | null>(null);
   const [testVehicleId, setTestVehicleId] = useState<string>(selectedVehicleId);
+  const [selectedVariant, setSelectedVariant] = useState<string>("AX7L Diesel AT 4x4");
   const [activeTab, setActiveTab] = useState<"leads" | "record" | "insights">("leads");
 
   // Mobile Microphone Recording States
@@ -56,43 +68,60 @@ export function SalesMobileApp({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Load leads on mount
+  // 1. Load Dealerships on Mount
   useEffect(() => {
-    async function load() {
+    async function loadDealers() {
       try {
-        const data = await fetchSalesLeads();
-        if (data && data.length > 0) {
-          setLeads(data);
-          setSelectedLead(data[0]);
-        } else {
-          // Default lead
-          const defaultLead: TestRideLeadItem = {
-            customer_id: profile?.customer_id || "CUST-AARAV-001",
-            name: profile?.name || "Aarav Sharma",
-            phone: profile?.phone || "+91 98201 23456",
-            email: profile?.email || "aarav.sharma@example.com",
-            city: profile?.city || "Mumbai",
-            preferred_vehicle: "Thar ROXX AX7L Diesel AT 4x4",
-            booking_status: "CONFIRMED_PRE_SALES",
-            scheduled_slot: "Tomorrow at 5:00 PM",
-            presales_notes: "Explored Thar ROXX in Virtual Showroom. Inquired about suspension and city commute."
-          };
-          setLeads([defaultLead]);
-          setSelectedLead(defaultLead);
+        const dealers = await fetchDealerships();
+        if (dealers && dealers.length > 0) {
+          setDealerships(dealers);
         }
       } catch (e) {
-        console.error(e);
+        console.error("Failed to load dealerships:", e);
       }
     }
-    load();
-  }, [profile]);
+    loadDealers();
+  }, []);
 
-  // Sync incoming vehicle
-  useEffect(() => {
-    if (selectedVehicleId) {
-      setTestVehicleId(selectedVehicleId);
+  // 2. Load Leads whenever selected showroom changes
+  const loadLeadsForShowroom = async (dealershipId: string) => {
+    setIsLoadingLeads(true);
+    try {
+      const data = await fetchSalesLeads(dealershipId);
+      if (data && data.length > 0) {
+        setLeads(data);
+        // Select the first lead by default
+        const first = data[0];
+        setSelectedLead(first);
+        if (first.vehicle_id) {
+          setTestVehicleId(first.vehicle_id);
+          setSelectedVariant(first.variant || "Official Variant");
+        }
+      } else {
+        setLeads([]);
+        setSelectedLead(null);
+      }
+    } catch (e) {
+      console.error("Failed to load sales leads:", e);
+      setLeads([]);
+    } finally {
+      setIsLoadingLeads(false);
     }
-  }, [selectedVehicleId]);
+  };
+
+  useEffect(() => {
+    loadLeadsForShowroom(selectedShowroom);
+  }, [selectedShowroom]);
+
+  // Handle lead selection - dynamic vehicle extraction from booking
+  const handleSelectLead = (lead: TestRideLeadItem) => {
+    setSelectedLead(lead);
+    // Dynamic vehicle id directly from booking API
+    const vId = lead.vehicle_id || "thar_roxx";
+    setTestVehicleId(vId);
+    setSelectedVariant(lead.variant || "AX7L Diesel AT 4x4");
+    setActiveTab("record");
+  };
 
   // Recording Timer
   useEffect(() => {
@@ -168,11 +197,11 @@ export function SalesMobileApp({
       const response = await uploadTestRideRecording({
         customer_id: selectedLead?.customer_id || profile?.customer_id || "CUST-AARAV-001",
         vehicle_id: testVehicleId,
-        variant: "AX7L Diesel AT 4x4",
-        sales_advisor_name: "Rajesh Varma (Bayview Mahindra)",
+        variant: selectedVariant,
+        sales_advisor_name: selectedLead?.dealership_name ? `Specialist (${selectedLead.dealership_name})` : "Rajesh Varma (Bayview Mahindra)",
         duration_seconds: Math.max(recordingSeconds, 184),
         audio_format: "audio/webm",
-        simulated_scenario: "bandra_sea_link_test_ride"
+        simulated_scenario: "test_drive_recording"
       });
 
       setInsights(response);
@@ -192,30 +221,56 @@ export function SalesMobileApp({
 
   const currentVehicleObj = vehicles.find((v) => v.id === testVehicleId) || vehicles[0];
 
+  const activeShowroomName =
+    selectedShowroom === "ALL"
+      ? "All Regional Dealerships"
+      : dealerships.find((d) => d.id === selectedShowroom)?.name || selectedShowroom;
+
   return (
     <div className="space-y-6">
-      {/* Stage Header Banner */}
-      <div className="bg-gradient-to-r from-neutral-900 via-stone-900 to-amber-950/80 p-5 rounded-2xl border border-amber-900/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
-        <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold uppercase tracking-wider mb-2">
+      {/* Stage Header Banner with Showroom Selector */}
+      <div className="bg-gradient-to-r from-neutral-900 via-stone-900 to-amber-950/80 p-5 rounded-2xl border border-amber-900/30 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shadow-xl">
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold uppercase tracking-wider">
             <Smartphone className="w-3.5 h-3.5" />
-            Stage 2: Sales Advisor Mobile Companion & Test Ride Recording
+            Stage 2: Sales Advisor Mobile Companion &amp; Test Ride Recording
           </div>
           <h2 className="text-xl md:text-2xl font-black text-white tracking-wide flex items-center gap-2">
-            <span>Advisor Field App & GCS Audio Insights Engine</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
-              Bayview Mahindra
-            </span>
+            <span>Advisor Field App &amp; GCS Audio Insights Engine</span>
           </h2>
-          <p className="text-xs md:text-sm text-neutral-300 mt-1 max-w-2xl">
-            Pre-sales leads automatically loaded. Sales Advisor records customer communication during test drive on mobile, dumps audio to GCS, and generates multi-dimensional AI insights.
+          <p className="text-xs md:text-sm text-neutral-300 max-w-2xl">
+            Select a showroom to load verified customer test drive bookings. The advisor companion automatically pulls the customer&apos;s booked vehicle from the database and captures live audio insights.
           </p>
+
+          {/* Showroom Selector Dropdown in Banner */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div className="flex items-center gap-1.5 text-xs text-amber-300 font-bold bg-black/50 px-3 py-1.5 rounded-xl border border-white/10">
+              <Building2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>Select Showroom:</span>
+              <select
+                value={selectedShowroom}
+                onChange={(e) => setSelectedShowroom(e.target.value)}
+                className="bg-neutral-900 text-white font-bold border border-white/20 rounded-lg px-2.5 py-1 text-xs outline-none focus:border-amber-400 cursor-pointer"
+              >
+                <option value="ALL">🏢 All Showrooms ({dealerships.length} Dealerships)</option>
+                {dealerships.map((dealer) => (
+                  <option key={dealer.id} value={dealer.id}>
+                    {dealer.name} ({dealer.city})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <span className="text-[11px] font-mono text-slate-400 bg-white/5 px-2.5 py-1 rounded-lg border border-white/10">
+              {leads.length} Booked Lead{leads.length !== 1 ? "s" : ""} Available
+            </span>
+          </div>
         </div>
 
         {insights && (
           <button
             onClick={() => onProceedToOutboundCall(insights)}
-            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs md:text-sm font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-red-900/40 flex items-center gap-2"
+            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs md:text-sm font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-red-900/40 flex items-center gap-2 shrink-0 cursor-pointer"
           >
             <span>Proceed to Stage 3: Outbound Call</span>
             <ArrowRight className="w-4 h-4" />
@@ -235,22 +290,24 @@ export function SalesMobileApp({
             </div>
 
             {/* Mobile Screen Shell */}
-            <div className="bg-neutral-950 rounded-[32px] overflow-hidden border border-neutral-800 flex flex-col h-[600px] text-xs">
+            <div className="bg-neutral-950 rounded-[32px] overflow-hidden border border-neutral-800 flex flex-col h-[620px] text-xs">
               {/* App Top Bar */}
-              <div className="bg-gradient-to-r from-red-900 to-neutral-900 px-4 py-3 border-b border-neutral-800 flex items-center justify-between">
+              <div className="bg-gradient-to-r from-red-950 via-neutral-900 to-black px-4 py-3 border-b border-neutral-800 flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] text-red-200 font-bold uppercase tracking-wider block">
-                    Mahindra Sales Advisor
+                  <span className="text-[9.5px] text-red-300 font-bold uppercase tracking-wider block">
+                    Mahindra Advisor Field App
                   </span>
-                  <span className="font-black text-white text-sm">Advisor Rajesh Varma</span>
+                  <span className="font-black text-white text-xs truncate max-w-[190px] block">
+                    {activeShowroomName}
+                  </span>
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-300 border border-green-500/30">
+                <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
                   Online
                 </span>
               </div>
 
               {/* Mobile Tabs */}
-              <div className="flex border-b border-neutral-800 bg-neutral-900/60">
+              <div className="flex border-b border-neutral-800 bg-neutral-900/60 text-[11px]">
                 <button
                   onClick={() => setActiveTab("leads")}
                   className={`flex-1 py-2.5 font-bold text-center transition-colors ${
@@ -284,101 +341,152 @@ export function SalesMobileApp({
               </div>
 
               {/* Mobile Tab Content */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {/* TAB 1: Leads loaded from Pre-sales */}
+              <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
+                {/* TAB 1: Leads loaded for Selected Showroom */}
                 {activeTab === "leads" && (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-neutral-300">
-                        Active Pre-Sales Inquiries:
-                      </span>
-                      <span className="text-[10px] text-neutral-400">Live CRM Sync</span>
-                    </div>
-
-                    {leads.map((lead, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => {
-                          setSelectedLead(lead);
-                          setActiveTab("record");
-                        }}
-                        className={`p-3 rounded-2xl border cursor-pointer transition-all ${
-                          selectedLead?.customer_id === lead.customer_id
-                            ? "bg-red-950/40 border-red-500 shadow-md shadow-red-950/40"
-                            : "bg-neutral-900 border-neutral-800 hover:border-neutral-700"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-white text-sm">{lead.name}</span>
-                          <span className="text-[9px] px-2 py-0.5 rounded-full bg-green-950 text-green-400 border border-green-800">
-                            {lead.booking_status}
-                          </span>
-                        </div>
-
-                        <p className="text-neutral-400 text-[11px] mt-1 flex items-center gap-1">
-                          <Phone className="w-3 h-3 text-red-400" />
-                          {lead.phone} • {lead.city}
-                        </p>
-
-                        <div className="mt-2 pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[10px]">
-                          <span className="text-amber-300 font-semibold">{lead.preferred_vehicle}</span>
-                          <span className="text-neutral-400">{lead.scheduled_slot}</span>
-                        </div>
+                    {/* Showroom filter inside mobile */}
+                    <div className="p-2.5 bg-neutral-900/90 rounded-xl border border-neutral-800 space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] text-neutral-400">
+                        <span className="font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
+                          <Building2 className="w-3 h-3" /> Showroom Filter
+                        </span>
+                        <span>{leads.length} Booked</span>
                       </div>
-                    ))}
-
-                    <div className="p-3 bg-neutral-900/60 rounded-xl border border-neutral-800 space-y-2">
-                      <span className="text-[10px] uppercase font-bold text-neutral-400 block">
-                        Advisor Action:
-                      </span>
-                      <button
-                        onClick={() => setActiveTab("record")}
-                        className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-red-950/50"
+                      <select
+                        value={selectedShowroom}
+                        onChange={(e) => setSelectedShowroom(e.target.value)}
+                        className="w-full bg-black text-white font-bold border border-neutral-700 rounded-lg px-2 py-1 text-[11px] outline-none"
                       >
-                        <Mic className="w-3.5 h-3.5" />
-                        <span>Start Test Ride Recording for {selectedLead?.name || "Aarav"}</span>
-                      </button>
+                        <option value="ALL">All Dealerships</option>
+                        {dealerships.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name} ({d.city})
+                          </option>
+                        ))}
+                      </select>
                     </div>
+
+                    {isLoadingLeads ? (
+                      <div className="py-8 text-center text-neutral-400 space-y-1.5">
+                        <RefreshCw className="w-5 h-5 animate-spin text-amber-400 mx-auto" />
+                        <p className="text-xs">Loading showroom leads...</p>
+                      </div>
+                    ) : leads.length === 0 ? (
+                      <div className="py-8 text-center text-neutral-400 p-4 bg-neutral-900/40 rounded-2xl border border-neutral-800 space-y-1">
+                        <AlertCircle className="w-6 h-6 text-amber-400 mx-auto" />
+                        <p className="font-bold text-white text-xs">No bookings for this showroom yet.</p>
+                        <p className="text-[10.5px] text-neutral-500">
+                          Select &quot;All Dealerships&quot; or book a new test ride in Pre-Sales Showroom.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {leads.map((lead, idx) => {
+                          const isSelected = selectedLead?.customer_id === lead.customer_id;
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => handleSelectLead(lead)}
+                              className={`p-3 rounded-2xl border cursor-pointer transition-all ${
+                                isSelected
+                                  ? "bg-red-950/40 border-red-500 shadow-md shadow-red-950/40 ring-1 ring-red-500/50"
+                                  : "bg-neutral-900 border-neutral-800 hover:border-neutral-700"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-white text-xs">{lead.name}</span>
+                                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+                                  {lead.booking_status}
+                                </span>
+                              </div>
+
+                              <p className="text-neutral-400 text-[10px] mt-1 flex items-center gap-1">
+                                <Phone className="w-2.5 h-2.5 text-red-400" />
+                                <span>{lead.phone}</span>
+                                {lead.city && <span>• 📍 {lead.city}</span>}
+                              </p>
+
+                              {/* Booked Vehicle & Variant */}
+                              <div className="mt-2 p-1.5 bg-black/60 rounded-lg border border-white/5 space-y-0.5">
+                                <div className="text-amber-300 font-bold text-[10.5px] flex items-center gap-1">
+                                  <Car className="w-3 h-3 text-red-400 shrink-0" />
+                                  <span className="truncate">{lead.preferred_vehicle}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-[9.5px] text-neutral-400">
+                                  <span>{lead.scheduled_slot}</span>
+                                  {lead.booking_reference && (
+                                    <span className="font-mono text-cyan-300 font-bold">
+                                      {lead.booking_reference}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {lead.booking_type === "HOME_DOORSTEP" && lead.delivery_address && (
+                                <div className="mt-1 text-[9.5px] text-emerald-400 truncate">
+                                  🏠 Doorstep: {lead.delivery_address}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {selectedLead && (
+                      <div className="pt-2">
+                        <button
+                          onClick={() => setActiveTab("record")}
+                          className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-red-950/50 cursor-pointer"
+                        >
+                          <Mic className="w-3.5 h-3.5" />
+                          <span>Start Test Ride for {selectedLead.name}</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* TAB 2: Mobile Audio Recording */}
                 {activeTab === "record" && (
-                  <div className="space-y-4">
-                    {/* Customer & Vehicle Header */}
-                    <div className="p-3 bg-neutral-900 rounded-xl border border-neutral-800 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-neutral-400 uppercase">Customer</span>
-                        <span className="font-bold text-white">{selectedLead?.name || "Aarav Sharma"}</span>
+                  <div className="space-y-3.5">
+                    {/* Customer & Booked Vehicle Header */}
+                    <div className="p-3 bg-neutral-900 rounded-2xl border border-neutral-800 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[10px] text-neutral-400 uppercase font-bold">Customer</span>
+                        <span className="font-bold text-white">{selectedLead?.name || "Valued Customer"}</span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-neutral-400 uppercase">Vehicle for Test Ride</span>
-                        <select
-                          value={testVehicleId}
-                          onChange={(e) => setTestVehicleId(e.target.value)}
-                          className="bg-neutral-950 border border-neutral-700 rounded-lg text-[11px] text-white px-2 py-1 font-semibold"
-                        >
-                          {vehicles.map((v) => (
-                            <option key={v.id} value={v.id}>
-                              {v.name}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[10px] text-neutral-400 uppercase font-bold">Phone</span>
+                        <span className="font-mono text-slate-300 text-[11px]">{selectedLead?.phone || "—"}</span>
+                      </div>
+                      <div className="pt-1.5 border-t border-neutral-800 flex items-center justify-between text-xs">
+                        <span className="text-[10px] text-neutral-400 uppercase font-bold">Test Ride Vehicle</span>
+                        <span className="font-black text-amber-400 text-[11px]">
+                          {currentVehicleObj?.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10.5px]">
+                        <span className="text-[10px] text-neutral-400 uppercase font-bold">Booked Variant</span>
+                        <span className="px-2 py-0.5 rounded bg-red-950 text-red-300 border border-red-500/30 font-bold">
+                          {selectedVariant}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Advisor Talking Points */}
-                    <div className="p-3 bg-neutral-900/50 rounded-xl border border-neutral-800 text-[11px] space-y-1 text-neutral-300">
-                      <span className="text-[10px] font-bold text-amber-400 uppercase block">
-                        Advisor Demo Checklist:
+                    {/* Advisor Talking Points tailored for the vehicle */}
+                    <div className="p-3 bg-neutral-900/60 rounded-2xl border border-neutral-800 text-[10.5px] space-y-1 text-neutral-300">
+                      <span className="text-[10px] font-bold text-amber-400 uppercase block flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" /> Advisor Demo Checklist ({currentVehicleObj.name}):
                       </span>
-                      <div>• Demonstrate FSD Suspension on rough patches / Sea Link</div>
-                      <div>• Showcase 2.2L mHawk Diesel Acceleration</div>
-                      <div>• Highlight 60:40 Split Reclining Rear Seats for legroom</div>
+                      <div>• Demonstrate Frequency Selective Damping (FSD) / Ride Pliability</div>
+                      <div>• Showcase Engine / EV Throttle Acceleration &amp; Brake Feel</div>
+                      <div>• Highlight Skyroof, Cockpit Twin Displays &amp; Rear Seat Comfort</div>
                     </div>
 
                     {/* Audio Waveform & Timer Recorder Shell */}
-                    <div className="p-5 bg-black rounded-2xl border border-neutral-800 text-center space-y-3">
+                    <div className="p-4 bg-black rounded-2xl border border-neutral-800 text-center space-y-3">
                       <div className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">
                         {isRecording ? "🔴 RECORDING IN PROGRESS" : "TEST RIDE AUDIO CAPTURE"}
                       </div>
@@ -389,7 +497,7 @@ export function SalesMobileApp({
                       </div>
 
                       {/* Animated Audio Waveform */}
-                      <div className="h-12 flex items-center justify-center gap-1 px-4">
+                      <div className="h-10 flex items-center justify-center gap-1 px-4">
                         {[4, 10, 18, 28, 14, 34, 22, 12, 30, 20, 8, 24, 16, 6].map((h, i) => (
                           <span
                             key={i}
@@ -397,7 +505,7 @@ export function SalesMobileApp({
                               isRecording && !isPaused ? "bg-red-500 animate-pulse" : "bg-neutral-800"
                             }`}
                             style={{
-                              height: isRecording && !isPaused ? `${h * 1.3}px` : "6px",
+                              height: isRecording && !isPaused ? `${h * 1.1}px` : "6px",
                               animationDelay: `${i * 60}ms`
                             }}
                           ></span>
@@ -405,11 +513,11 @@ export function SalesMobileApp({
                       </div>
 
                       {/* Recording Controls */}
-                      <div className="flex items-center justify-center gap-3 pt-2">
+                      <div className="flex items-center justify-center gap-3 pt-1">
                         {!isRecording ? (
                           <button
                             onClick={startRecording}
-                            className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-full text-xs flex items-center gap-2 shadow-lg shadow-red-950/60"
+                            className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-full text-xs flex items-center gap-2 shadow-lg shadow-red-950/60 cursor-pointer"
                           >
                             <Mic className="w-4 h-4" />
                             <span>Start Ride Recording</span>
@@ -419,7 +527,7 @@ export function SalesMobileApp({
                             {isPaused ? (
                               <button
                                 onClick={resumeRecording}
-                                className="p-3 bg-amber-600 hover:bg-amber-500 text-white rounded-full"
+                                className="p-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-full cursor-pointer"
                                 title="Resume"
                               >
                                 <Play className="w-4 h-4" />
@@ -427,7 +535,7 @@ export function SalesMobileApp({
                             ) : (
                               <button
                                 onClick={pauseRecording}
-                                className="p-3 bg-neutral-800 hover:bg-neutral-700 text-white rounded-full border border-neutral-700"
+                                className="p-2.5 bg-neutral-800 hover:bg-neutral-700 text-white rounded-full border border-neutral-700 cursor-pointer"
                                 title="Pause"
                               >
                                 <Pause className="w-4 h-4" />
@@ -436,10 +544,10 @@ export function SalesMobileApp({
 
                             <button
                               onClick={stopAndProcessRecording}
-                              className="px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-full text-xs flex items-center gap-1.5 shadow-md shadow-red-950/50"
+                              className="px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-full text-xs flex items-center gap-1.5 shadow-md shadow-red-950/50 cursor-pointer"
                             >
                               <Square className="w-3.5 h-3.5" />
-                              <span>Stop & Upload to GCS</span>
+                              <span>Stop &amp; Upload to GCS</span>
                             </button>
                           </>
                         )}
@@ -448,70 +556,53 @@ export function SalesMobileApp({
 
                     {isUploading && (
                       <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-300 text-center space-y-1">
-                        <UploadCloud className="w-5 h-5 animate-bounce mx-auto text-amber-400" />
-                        <span className="font-bold text-xs">Uploading audio to Google Cloud Storage (GCS)...</span>
-                        <p className="text-[10px] text-neutral-400">Extracting STT transcript & AI Insights</p>
+                        <UploadCloud className="w-5 h-5 animate-bounce mx-auto" />
+                        <p className="font-bold text-xs">Uploading Audio to Cloud Storage &amp; Analyzing...</p>
+                        <p className="text-[10px] text-neutral-400">Executing Multi-Dimensional Speech &amp; Sentiment AI</p>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* TAB 3: AI Insights Quick Mobile View */}
+                {/* TAB 3: AI Insights */}
                 {activeTab === "insights" && (
-                  <div className="space-y-3">
+                  <div className="space-y-3 text-left">
                     {insights ? (
-                      <div className="space-y-3">
-                        <div className="p-3 bg-green-950/30 border border-green-800/50 rounded-xl text-green-300 flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
-                          <div>
-                            <span className="font-bold block">GCS Upload Complete</span>
-                            <span className="text-[9px] text-neutral-400 font-mono truncate block max-w-[200px]">
-                              {insights.gcs_uri}
+                      <>
+                        <div className="p-3 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-white">{insights.vehicle_name}</span>
+                            <span className="font-mono text-emerald-400 font-bold">
+                              {Math.round(insights.purchase_intent_score * 100)}% Intent
                             </span>
+                          </div>
+                          <div className="text-[10px] text-neutral-400">
+                            GCS URI: <span className="font-mono text-neutral-300">{insights.gcs_uri}</span>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="p-2.5 bg-neutral-900 rounded-xl border border-neutral-800 text-center">
-                            <span className="text-[10px] text-neutral-400 block">Customer Sentiment</span>
-                            <span className="text-base font-black text-green-400">
-                              {(insights.customer_sentiment_score * 100).toFixed(0)}% Positive
-                            </span>
-                          </div>
-                          <div className="p-2.5 bg-neutral-900 rounded-xl border border-neutral-800 text-center">
-                            <span className="text-[10px] text-neutral-400 block">Purchase Intent</span>
-                            <span className="text-base font-black text-amber-400">
-                              {(insights.purchase_intent_score * 100).toFixed(0)}% High
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="p-3 bg-neutral-900 rounded-xl border border-neutral-800 space-y-1">
-                          <span className="text-[10px] uppercase font-bold text-red-400 block">
-                            Key Objections Captured:
-                          </span>
-                          <ul className="text-[11px] text-neutral-300 space-y-1">
-                            {insights.objections_raised?.map((o, idx) => (
-                              <li key={idx} className="flex items-start gap-1">
-                                <span className="text-red-400 font-bold">•</span>
-                                <span>{o}</span>
-                              </li>
+                        <div className="p-3 rounded-2xl bg-emerald-950/30 border border-emerald-800/40 space-y-1">
+                          <span className="text-[10px] font-bold text-emerald-400 uppercase">Loved Features:</span>
+                          <ul className="text-[10.5px] text-neutral-300 list-disc pl-4 space-y-0.5">
+                            {insights.loved_features.map((f, i) => (
+                              <li key={i}>{f}</li>
                             ))}
                           </ul>
                         </div>
 
-                        <button
-                          onClick={() => onProceedToOutboundCall(insights)}
-                          className="w-full py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-950/60"
-                        >
-                          <Phone className="w-4 h-4" />
-                          <span>Trigger Outbound MIA Follow-Up Call</span>
-                        </button>
-                      </div>
+                        <div className="p-3 rounded-2xl bg-amber-950/30 border border-amber-800/40 space-y-1">
+                          <span className="text-[10px] font-bold text-amber-400 uppercase">Objections Raised:</span>
+                          <ul className="text-[10.5px] text-neutral-300 list-disc pl-4 space-y-0.5">
+                            {insights.objections_raised.map((o, i) => (
+                              <li key={i}>{o}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </>
                     ) : (
-                      <div className="text-center py-10 text-neutral-500 space-y-2">
-                        <FileText className="w-8 h-8 mx-auto opacity-40" />
-                        <p>No recording processed yet. Start a test ride in the Test Ride tab.</p>
+                      <div className="py-8 text-center text-neutral-400">
+                        <AlertCircle className="w-6 h-6 text-neutral-600 mx-auto mb-1" />
+                        <p>Complete a test drive recording first to generate AI insights.</p>
                       </div>
                     )}
                   </div>
@@ -521,161 +612,116 @@ export function SalesMobileApp({
           </div>
         </div>
 
-        {/* Right 7 Cols: Multi-Dimensional AI Insights & GCS Dump Panel */}
-        <div className="lg:col-span-7 bg-neutral-900/90 rounded-2xl border border-neutral-800 p-6 space-y-5 shadow-2xl">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-neutral-800 pb-4">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                Google Cloud Storage & Gemini Multimodal
-              </span>
-              <h3 className="text-xl font-black text-white mt-1">
-                Test Ride Communication Insights & Analytics
-              </h3>
+        {/* Right 7 Cols: Detailed In-Vehicle Test Ride Audio & Insights Panel */}
+        <div className="lg:col-span-7 space-y-4 text-left">
+          {/* Active Vehicle Card (From Booking API) */}
+          <div className="p-5 rounded-2xl bg-neutral-900 border border-neutral-800 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-red-600/30 text-red-300 border border-red-500/40 font-mono text-[10px] font-bold uppercase">
+                  Active Test Ride Vehicle
+                </span>
+                <span className="text-[11px] font-mono text-cyan-400 font-bold">
+                  {selectedLead?.booking_reference || "LIVE BOOKING"}
+                </span>
+              </div>
+              <h3 className="text-xl font-black text-white">{currentVehicleObj.name}</h3>
+              <p className="text-xs text-amber-300 font-bold">
+                Variant: {selectedVariant} • Showroom: {selectedLead?.dealership_name || activeShowroomName}
+              </p>
+              <p className="text-[11px] text-neutral-400">
+                Customer: <strong>{selectedLead?.name || "Aarav Sharma"}</strong> ({selectedLead?.phone || "+91 98201 23456"})
+              </p>
             </div>
 
-            {insights && (
-              <span className="text-xs px-2.5 py-1 rounded-full bg-green-500/20 text-green-400 border border-green-500/30 font-mono">
-                Session: {insights.session_id}
-              </span>
-            )}
+            {/* Vehicle Image */}
+            <div className="relative w-36 h-24 rounded-xl overflow-hidden border border-neutral-700 bg-neutral-950 shrink-0">
+              <img
+                src={
+                  currentVehicleObj.hero_image ||
+                  currentVehicleObj.image_url ||
+                  `/assets/${currentVehicleObj.id.replace("_", "-")}.jpg`
+                }
+                alt={currentVehicleObj.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = "/assets/thar-roxx.jpg";
+                }}
+              />
+            </div>
           </div>
 
+          {/* AI Insights & Audio STT Transcript Details */}
           {insights ? (
-            <div className="space-y-5 text-xs">
-              {/* Storage Metadata Card */}
-              <div className="p-3.5 bg-black/60 rounded-xl border border-neutral-800 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-neutral-400 font-medium flex items-center gap-1.5">
-                    <Database className="w-3.5 h-3.5 text-blue-400" />
-                    GCS Recording Storage URI:
-                  </span>
-                  <span className="text-green-400 font-mono text-[11px] font-bold">Encrypted & Archived</span>
-                </div>
-                <div className="p-2 rounded bg-neutral-950 border border-neutral-850 text-neutral-300 font-mono text-[11px] break-all">
-                  {insights.gcs_uri}
-                </div>
-              </div>
-
-              {/* Metrics Grid */}
+            <div className="space-y-4 animate-in fade-in duration-300">
+              {/* Score Metric Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 bg-neutral-950 rounded-xl border border-neutral-800 text-center">
-                  <span className="text-[10px] text-neutral-400 uppercase block font-semibold">Customer Sentiment</span>
-                  <span className="text-xl font-black text-green-400 mt-0.5 block">
-                    {(insights.customer_sentiment_score * 100).toFixed(0)}%
-                  </span>
-                  <span className="text-[9px] text-neutral-500">Very Positive Tone</span>
+                <div className="p-3.5 rounded-2xl bg-neutral-900 border border-neutral-800">
+                  <span className="text-[10px] text-neutral-400 uppercase font-bold">Customer Sentiment</span>
+                  <p className="text-xl font-black text-emerald-400 mt-1">
+                    {Math.round(insights.customer_sentiment_score * 100)}% Positive
+                  </p>
                 </div>
-                <div className="p-3 bg-neutral-950 rounded-xl border border-neutral-800 text-center">
-                  <span className="text-[10px] text-neutral-400 uppercase block font-semibold">Purchase Intent</span>
-                  <span className="text-xl font-black text-amber-400 mt-0.5 block">
-                    {(insights.purchase_intent_score * 100).toFixed(0)}%
-                  </span>
-                  <span className="text-[9px] text-neutral-500">High Conversion Likelihood</span>
+                <div className="p-3.5 rounded-2xl bg-neutral-900 border border-neutral-800">
+                  <span className="text-[10px] text-neutral-400 uppercase font-bold">Purchase Intent</span>
+                  <p className="text-xl font-black text-cyan-400 mt-1">
+                    {Math.round(insights.purchase_intent_score * 100)}% Ready
+                  </p>
                 </div>
-                <div className="p-3 bg-neutral-950 rounded-xl border border-neutral-800 text-center">
-                  <span className="text-[10px] text-neutral-400 uppercase block font-semibold">Advisor Score</span>
-                  <span className="text-xl font-black text-blue-400 mt-0.5 block">
+                <div className="p-3.5 rounded-2xl bg-neutral-900 border border-neutral-800">
+                  <span className="text-[10px] text-neutral-400 uppercase font-bold">Advisor Pitch Score</span>
+                  <p className="text-xl font-black text-amber-400 mt-1">
                     {insights.advisor_pitch_score} / 10
-                  </span>
-                  <span className="text-[9px] text-neutral-500">Rajesh Varma</span>
+                  </p>
                 </div>
-                <div className="p-3 bg-neutral-950 rounded-xl border border-neutral-800 text-center">
-                  <span className="text-[10px] text-neutral-400 uppercase block font-semibold">Duration</span>
-                  <span className="text-xl font-black text-purple-400 mt-0.5 block">
-                    {Math.floor(insights.duration_seconds / 60)}m {insights.duration_seconds % 60}s
-                  </span>
-                  <span className="text-[9px] text-neutral-500">Sea Link Route</span>
+                <div className="p-3.5 rounded-2xl bg-neutral-900 border border-neutral-800">
+                  <span className="text-[10px] text-neutral-400 uppercase font-bold">GCS Storage Status</span>
+                  <p className="text-xs font-mono font-bold text-purple-400 mt-2 truncate">
+                    Uploaded (GCS)
+                  </p>
                 </div>
               </div>
 
-              {/* Loved Features vs Objections Raised */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Loved Features */}
-                <div className="p-4 bg-green-950/20 border border-green-800/40 rounded-xl space-y-2">
-                  <span className="text-[11px] font-bold text-green-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4" /> Customer Loved Features
+              {/* Full In-Vehicle Transcript Box */}
+              <div className="p-5 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-3 shadow-xl">
+                <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Volume2 className="w-4 h-4 text-purple-400" />
+                    <span>In-Vehicle Test Ride Audio STT Transcript (Multi-Turn)</span>
+                  </h4>
+                  <span className="text-[10px] font-mono text-neutral-400">
+                    Duration: {insights.duration_seconds}s
                   </span>
-                  <ul className="space-y-1.5 text-neutral-300">
-                    {insights.loved_features?.map((f, i) => (
-                      <li key={i} className="flex items-start gap-1.5">
-                        <span className="text-green-400 font-bold">•</span>
-                        <span>{f}</span>
-                      </li>
-                    ))}
-                  </ul>
                 </div>
 
-                {/* Objections / Concerns */}
-                <div className="p-4 bg-red-950/20 border border-red-800/40 rounded-xl space-y-2">
-                  <span className="text-[11px] font-bold text-red-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <AlertCircle className="w-4 h-4" /> Objections / Friction Points
-                  </span>
-                  <ul className="space-y-1.5 text-neutral-300">
-                    {insights.objections_raised?.map((o, i) => (
-                      <li key={i} className="flex items-start gap-1.5">
-                        <span className="text-red-400 font-bold">•</span>
-                        <span>{o}</span>
-                      </li>
-                    ))}
-                  </ul>
+                <div className="p-4 rounded-xl bg-black/70 border border-neutral-800 text-xs font-mono text-neutral-300 whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
+                  {insights.transcript}
                 </div>
               </div>
 
-              {/* Advisor Coaching & Recommendation */}
-              <div className="p-4 bg-neutral-950 rounded-xl border border-neutral-800 space-y-2">
-                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4" /> AI Coaching & Next Best Action
-                </span>
-                <p className="text-neutral-300 leading-relaxed">
+              {/* Coaching Feedback & Next Action */}
+              <div className="p-4 rounded-2xl bg-purple-950/30 border border-purple-800/40 space-y-2">
+                <h4 className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4 text-purple-400" />
+                  <span>AI Coaching Feedback for Sales Advisor:</span>
+                </h4>
+                <p className="text-xs text-neutral-300 leading-relaxed">
                   {insights.advisor_coaching_feedback}
                 </p>
-                <div className="mt-2 pt-2 border-t border-neutral-800 text-neutral-200">
-                  <strong className="text-red-400">Automated Next Action: </strong>
-                  {insights.recommended_action}
+                <div className="pt-2 border-t border-purple-800/30 text-xs text-amber-300 font-semibold">
+                  Recommended Follow-up: {insights.recommended_action}
                 </div>
               </div>
-
-              {/* Timestamped Speech-to-Text Conversation Transcript */}
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">
-                  Full Speech-to-Text Diarized Transcript:
-                </span>
-                <div className="p-3.5 bg-neutral-950 rounded-xl border border-neutral-800 max-h-48 overflow-y-auto space-y-2 font-mono text-[11px] text-neutral-300 leading-relaxed">
-                  {insights.transcript.split("\n").map((line, idx) => (
-                    <div key={idx} className={line.includes("Aarav") ? "text-amber-200" : "text-neutral-300"}>
-                      {line}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Big CTA */}
-              <button
-                onClick={() => onProceedToOutboundCall(insights)}
-                className="w-full py-3.5 bg-gradient-to-r from-red-600 via-red-500 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-xl shadow-red-950/60"
-              >
-                <Phone className="w-4 h-4" />
-                <span>Launch Stage 3: Proactive Outbound Call from MIA to Aarav</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
             </div>
           ) : (
-            <div className="text-center py-16 space-y-4 text-neutral-400">
-              <Mic className="w-12 h-12 mx-auto text-neutral-600 animate-pulse" />
-              <div>
-                <h4 className="text-base font-bold text-neutral-200">
-                  Awaiting Test Ride Audio Stream
-                </h4>
-                <p className="text-xs text-neutral-400 mt-1 max-w-md mx-auto">
-                  Use the Sales Advisor mobile simulator on the left to start and record the communication during the test ride.
-                </p>
+            <div className="p-8 rounded-2xl bg-neutral-900/60 border border-neutral-800 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center mx-auto text-neutral-400">
+                <Mic className="w-6 h-6" />
               </div>
-              <button
-                onClick={startRecording}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs"
-              >
-                Simulate Sea Link Test Ride Now
-              </button>
+              <h4 className="text-base font-bold text-white">Ready for Test Ride Audio Capture</h4>
+              <p className="text-xs text-neutral-400 max-w-md mx-auto">
+                Select a customer lead on the mobile phone interface, tap &quot;Start Ride Recording&quot; to begin in-cabin audio recording, and upload to GCS to generate STT transcript and buyer sentiment analytics.
+              </p>
             </div>
           )}
         </div>

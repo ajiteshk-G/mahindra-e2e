@@ -110,9 +110,12 @@ export async function bookTestDrive(payload: any) {
 }
 
 // Stage 2: Sales Mobile App & Test Ride Recording
-export async function fetchSalesLeads() {
+export async function fetchSalesLeads(dealershipId?: string) {
   try {
-    const res = await fetch(`${API_BASE}/sales/leads`);
+    const url = dealershipId && dealershipId !== "ALL"
+      ? `${API_BASE}/sales/leads?dealership_id=${encodeURIComponent(dealershipId)}`
+      : `${API_BASE}/sales/leads`;
+    const res = await fetch(url);
     return await res.json();
   } catch (err) {
     return [];

@@ -13,6 +13,8 @@ from app.schemas.sales_recording import (
     TestRideLeadItem
 )
 
+from app.services.catalog_service import CatalogService
+
 UPLOAD_DIR = "/tmp/mahindra_test_rides"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -29,33 +31,82 @@ DEFAULT_TEST_RIDE_TRANSCRIPT = """[00:08] Advisor Rajesh: "Namaste Aarav ji! Wel
 
 class SalesRecordingService:
     @staticmethod
-    async def get_sales_leads(db: AsyncSession) -> List[TestRideLeadItem]:
-        """Fetch qualified leads from presales / CRM for the Sales Mobile App."""
-        stmt = select(Customer).order_by(Customer.updated_at.desc()).limit(20)
-        result = await db.execute(stmt)
-        customers = result.scalars().all()
+    async def get_sales_leads(db: AsyncSession, dealership_id: Optional[str] = None) -> List[TestRideLeadItem]:
+        """Fetch qualified leads from bookings and CRM filtered by showroom for the Sales Mobile App."""
+        # 1. Query test drive bookings
+        booking_stmt = select(TestDriveBooking).order_by(TestDriveBooking.created_at.desc())
+        if dealership_id and dealership_id.strip() and dealership_id.strip() != "ALL":
+            booking_stmt = booking_stmt.where(
+                (TestDriveBooking.dealership_id == dealership_id.strip()) |
+                (TestDriveBooking.dealership_name.ilike(f"%{dealership_id.strip()}%"))
+            )
+        booking_res = await db.execute(booking_stmt)
+        bookings = booking_res.scalars().all()
 
         leads: List[TestRideLeadItem] = []
-        for c in customers:
-            # Check for bookings
-            booking_stmt = select(TestDriveBooking).where(TestDriveBooking.customer_id == c.id).order_by(TestDriveBooking.created_at.desc())
-            booking_res = await db.execute(booking_stmt)
-            booking = booking_res.scalars().first()
+        booked_customer_ids = set()
 
-            slot_str = f"{booking.scheduled_date} at {booking.scheduled_time_slot}" if booking else "Tomorrow at 5:00 PM"
-            status_str = booking.status if booking else ("LEAD_READY_FOR_TEST_RIDE" if c.current_phase == "PRE_SALES" else c.current_phase)
-            
+        for b in bookings:
+            cust_stmt = select(Customer).where(Customer.id == b.customer_id)
+            c_res = await db.execute(cust_stmt)
+            c = c_res.scalars().first()
+
+            v_info = CatalogService.get_vehicle_by_id(b.vehicle_id)
+            veh_name = v_info.name if v_info else b.vehicle_id.replace("_", " ").title()
+
+            cust_name = c.name if c else "Valued Customer"
+            cust_phone = c.phone if c else ""
+            cust_email = c.email if c else None
+            cust_city = c.city if c else "Mumbai"
+            cust_id_str = c.customer_id if c else f"CUST-{b.customer_id}"
+
+            if c:
+                booked_customer_ids.add(c.id)
+
             leads.append(TestRideLeadItem(
-                customer_id=c.customer_id,
-                name=c.name,
-                phone=c.phone,
-                email=c.email,
-                city=c.city or "Mumbai",
-                preferred_vehicle=c.interested_variant or "Thar ROXX AX7L Diesel AT 4x4",
-                booking_status=status_str,
-                scheduled_slot=slot_str,
-                presales_notes=f"Interested in 4x4 with city commute comfort. Explored {c.interested_vehicle_id} in Pre-sales Virtual Showroom."
+                customer_id=cust_id_str,
+                name=cust_name,
+                phone=cust_phone,
+                email=cust_email,
+                city=cust_city,
+                preferred_vehicle=f"{veh_name} ({b.variant})",
+                vehicle_id=b.vehicle_id,
+                variant=b.variant,
+                booking_reference=b.booking_reference,
+                dealership_id=b.dealership_id,
+                dealership_name=b.dealership_name,
+                booking_type=b.booking_type or "HOME_DOORSTEP",
+                delivery_address=b.delivery_address,
+                booking_status=b.status or "CONFIRMED",
+                scheduled_slot=f"{b.scheduled_date} at {b.scheduled_time_slot}",
+                presales_notes=f"Test drive booked for {veh_name} ({b.variant}) at {b.dealership_name}. Booking Ref: {b.booking_reference}."
             ))
+
+        # 2. If no filter or empty, also include qualified pre-sales inquiry customers
+        if not dealership_id or dealership_id == "ALL":
+            cust_stmt = select(Customer).order_by(Customer.updated_at.desc()).limit(10)
+            cust_res = await db.execute(cust_stmt)
+            customers = cust_res.scalars().all()
+            for c in customers:
+                if c.id not in booked_customer_ids:
+                    v_info = CatalogService.get_vehicle_by_id(c.interested_vehicle_id or "thar_roxx")
+                    veh_name = v_info.name if v_info else "Mahindra Thar ROXX"
+                    leads.append(TestRideLeadItem(
+                        customer_id=c.customer_id,
+                        name=c.name,
+                        phone=c.phone,
+                        email=c.email,
+                        city=c.city or "Mumbai",
+                        preferred_vehicle=f"{veh_name} ({c.interested_variant or 'AX7L Diesel AT 4x4'})",
+                        vehicle_id=c.interested_vehicle_id or "thar_roxx",
+                        variant=c.interested_variant or "AX7L Diesel AT 4x4",
+                        dealership_name="Mahindra Bayview Motors - Bandra West",
+                        dealership_id="bayview_bandra",
+                        booking_status="INQUIRY_READY_FOR_RIDE",
+                        scheduled_slot="Tomorrow at 11:00 AM",
+                        presales_notes=f"Explored {veh_name} in Virtual Showroom. Inquired about pricing and performance."
+                    ))
+
         return leads
 
     @staticmethod

@@ -13,6 +13,7 @@ export interface VehicleItem {
   category: "Authentic SUV" | "Tech SUV" | "Born Electric SUV" | "Commercial";
   price_range: string;
   hero_image: string;
+  image_url?: string;
   engine_specs: string;
   seating_capacity: string;
   fuel_or_battery: string;
@@ -85,6 +86,13 @@ export interface TestRideLeadItem {
   email?: string;
   city: string;
   preferred_vehicle: string;
+  vehicle_id?: string;
+  variant?: string;
+  booking_reference?: string;
+  dealership_id?: string;
+  dealership_name?: string;
+  booking_type?: string;
+  delivery_address?: string;
   booking_status: string;
   scheduled_slot?: string;
   presales_notes?: string;
