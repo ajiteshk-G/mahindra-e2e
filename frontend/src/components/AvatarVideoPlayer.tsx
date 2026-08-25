@@ -89,15 +89,15 @@ export function AvatarVideoPlayer({ isRecording, rmsLevel, isSpeaking }: AvatarV
               <span>Kabir</span>
               <span className="text-[10px] text-cyan-400 font-mono font-medium">Mahindra AI Specialist</span>
             </div>
-            <p className="text-[11px] text-slate-400 max-w-[220px]">
-              {isRecording ? "Listening & streaming Gemini Live Avatar..." : "Click Start Live Session to talk with Kabir"}
+            <p className="text-[11px] text-slate-300 max-w-[220px]">
+              {isRecording ? "Listening to you..." : "Click Start Live Session to talk with Kabir"}
             </p>
           </div>
         </div>
       </div>
 
       {/* Top-Left Live Video HUD Badge */}
-      <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-cyan-400/30 text-[10px] font-bold text-white shadow-md">
+      <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 bg-black/80 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/10 text-[9.5px] font-bold text-white shadow-md">
         <span
           className={`w-2 h-2 rounded-full ${
             isSpeaking
@@ -108,14 +108,14 @@ export function AvatarVideoPlayer({ isRecording, rmsLevel, isSpeaking }: AvatarV
           }`}
         />
         <span>
-          {isSpeaking ? "KABIR SPEAKING" : isRecording ? "KABIR LISTENING" : "KABIR STANDBY"}
+          {isSpeaking ? "SPEAKING" : isRecording ? "LISTENING" : "STANDBY"}
         </span>
       </div>
 
       {/* Top-Right Modality Badge */}
-      <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-[9px] font-mono text-cyan-300 shadow-md">
-        <Sparkles className="w-3 h-3 text-cyan-400" />
-        <span>GEMINI LIVE AVATAR</span>
+      <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10 text-[8.5px] font-mono text-cyan-300 shadow-md">
+        <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
+        <span>GEMINI LIVE</span>
       </div>
     </div>
   );

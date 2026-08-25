@@ -323,20 +323,9 @@ export function PreSalesShowroom({
                   <Award className="w-3 h-3 text-emerald-600" />
                   5-Star NCAP
                 </span>
-
-                <button
-                  onClick={() => handleStartConsultation(currentVehicle)}
-                  className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white shadow-xs transition-all hover:scale-105 cursor-pointer group"
-                  title="Talk to Kabir AI Specialist (Gemini Live Avatar)"
-                >
-                  <div className="relative w-5 h-5 rounded-full overflow-hidden border border-cyan-400 shrink-0">
-                    <img src="/avatars/jay.png" alt="Kabir Avatar" className="w-full h-full object-cover" />
-                    <span className="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  </div>
-                  <span className="text-[10px] font-bold text-cyan-300 flex items-center gap-1">
-                    Gemini Live Avatar
-                  </span>
-                </button>
+                <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
+                  {currentVehicle.category || "SUV"}
+                </span>
               </div>
             </div>
 
@@ -355,27 +344,27 @@ export function PreSalesShowroom({
               <button
                 onClick={() => handleStartConsultation(currentVehicle)}
                 className="self-start sm:self-auto flex items-center gap-3 p-2.5 pr-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-cyan-500/30 hover:border-cyan-400 text-white shadow-lg transition-all hover:scale-102 cursor-pointer group text-left shrink-0"
-                title="Click to talk with Kabir Gemini Live Avatar"
+                title={`Ask Kabir about ${currentVehicle.name}`}
               >
                 <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-cyan-400 shadow-[0_0_12px_rgba(0,229,255,0.4)] shrink-0 bg-slate-800">
                   <img
                     src="/avatars/jay.png"
                     alt="Kabir Avatar"
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                    className="w-full h-full object-cover object-[50%_15%] group-hover:scale-110 transition-transform duration-300"
                   />
                   <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-slate-900 animate-pulse"></span>
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-black text-white group-hover:text-cyan-300 transition-colors">
-                      Kabir Live AI
+                      Consult with Kabir
                     </span>
                     <span className="text-[9px] font-mono text-cyan-400 bg-cyan-950/80 px-1.5 py-0.2 rounded border border-cyan-500/30">
                       LIVE
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400 group-hover:text-slate-300">
-                    Click to start audio/video chat
+                    Ask about specs, comparisons &amp; booking
                   </p>
                 </div>
               </button>
