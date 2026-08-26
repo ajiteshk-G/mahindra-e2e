@@ -345,11 +345,15 @@ export function TestDriveChatCalendar({
             setSelectedSlot(firstAvail.slot_time);
           }
         } else {
-          const err = await res.json();
-          setErrorMsg(err.detail || "Failed to load slots from database.");
+          let msg = "Failed to load slots from database.";
+          try {
+            const err = await res.json();
+            msg = err.detail || msg;
+          } catch (e) {}
+          setErrorMsg(msg);
         }
       } catch (err: any) {
-        console.error("Error fetching slots:", err);
+        console.debug("Error fetching slots:", err);
         setErrorMsg("Could not connect to database slots API.");
       } finally {
         setIsLoadingSlots(false);
@@ -403,8 +407,12 @@ export function TestDriveChatCalendar({
           onSlotBooked(data);
         }
       } else {
-        const err = await res.json();
-        setErrorMsg(err.detail || "Slot could not be reserved. Please try another.");
+        let msg = "Slot could not be reserved. Please try another.";
+        try {
+          const err = await res.json();
+          msg = err.detail || msg;
+        } catch (e) {}
+        setErrorMsg(msg);
       }
     } catch (err: any) {
       setErrorMsg("Connection error while reserving slot in database.");

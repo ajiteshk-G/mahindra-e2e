@@ -211,6 +211,7 @@ export default function Home() {
           <ChatAvatarPanel
             isRecording={liveVoice.isRecording}
             rmsLevel={liveVoice.rmsLevel}
+            isAssistantSpeaking={liveVoice.isAssistantSpeaking}
             messages={liveVoice.messages}
             activeLanguage={liveVoice.activeLanguage}
             onToggleRecording={(custName, custPhone, vehId) => {

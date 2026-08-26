@@ -65,6 +65,7 @@ export function OutboundCallSimulator({
   const [leads, setLeads] = useState<OutboundLeadItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLead, setSelectedLead] = useState<OutboundLeadItem | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Egress Option: "browser" vs "twilio"
   const [EgressMode, setEgressMode] = useState<"browser" | "twilio">("browser");
@@ -90,59 +91,74 @@ export function OutboundCallSimulator({
   const geminiClientRef = useRef<GeminiLiveClient | null>(null);
 
   // Load authentic completed test drive bookings directly from Cloud SQL database
-  useEffect(() => {
-    async function loadData() {
-      // Clean up any legacy sessionStorage
-      if (typeof window !== "undefined") {
-        sessionStorage.removeItem("mahindra_selected_outbound_lead");
-      }
+  const loadData = async () => {
+    setIsLoading(true);
+    // Clean up any legacy sessionStorage
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("mahindra_selected_outbound_lead");
+    }
 
-      try {
-        const rawBookings = await fetchAdminBookings();
-        const bookingsList = Array.isArray(rawBookings) ? rawBookings : (rawBookings?.bookings || []);
-        if (Array.isArray(bookingsList) && bookingsList.length > 0) {
-          const completed: OutboundLeadItem[] = bookingsList
-            .filter((b: any) => b.status === "TestRide_Completed" || (b.test_ride_sessions && b.test_ride_sessions.length > 0))
-            .map((b: any) => ({
-              booking_reference: b.booking_reference,
-              customer_id: b.customer_id,
-              customer_name: b.customer_name,
-              customer_phone: b.customer_phone,
-              customer_city: b.customer_city || "Mumbai",
-              vehicle_name: b.vehicle_name,
-              variant: b.variant,
-              dealership_name: b.dealership_name,
-              sales_advisor_name: b.sales_advisor_name || "Mahindra Sales Consultant",
-              session_id: b.test_ride_sessions?.[0]?.session_id || b.booking_reference,
-              status: "TestRide_Completed",
-              loved_features: b.loved_features || [],
-              objections_raised: b.objections_raised || [],
-              has_feedback_call: b.outbound_sessions && b.outbound_sessions.length > 0
-            }));
+    try {
+      const rawBookings = await fetchAdminBookings();
+      const bookingsList = Array.isArray(rawBookings) ? rawBookings : (rawBookings?.bookings || []);
+      if (Array.isArray(bookingsList) && bookingsList.length > 0) {
+        const completed: OutboundLeadItem[] = bookingsList
+          .filter((b: any) => 
+            b.status === "TestRide_Completed" || 
+            b.status === "COMPLETED" || 
+            b.status?.toLowerCase().includes("completed") ||
+            (b.test_ride_sessions && b.test_ride_sessions.length > 0) ||
+            (b.test_ride_transcript && b.test_ride_transcript.length > 0)
+          )
+          .map((b: any) => ({
+            booking_reference: b.booking_reference,
+            customer_id: b.customer_id,
+            customer_name: b.customer_name,
+            customer_phone: b.customer_phone,
+            customer_city: b.customer_city || "Mumbai",
+            vehicle_name: b.vehicle_name,
+            variant: b.variant,
+            dealership_name: b.dealership_name,
+            sales_advisor_name: b.sales_advisor_name || "Mahindra Sales Consultant",
+            session_id: b.test_ride_sessions?.[0]?.session_id || b.booking_reference,
+            status: "TestRide_Completed",
+            loved_features: b.loved_features || [],
+            objections_raised: b.objections_raised || [],
+            has_feedback_call: b.outbound_sessions && b.outbound_sessions.length > 0
+          }));
 
-          if (completed.length > 0) {
-            setLeads(completed);
-            setSelectedLead(completed[0]);
-            if (completed[0].customer_phone) {
-              setTwilioPhoneNumber(completed[0].customer_phone);
+        if (completed.length > 0) {
+          setLeads(completed);
+          setSelectedLead((prev) => {
+            if (prev) {
+              const matched = completed.find(c => c.booking_reference === prev.booking_reference);
+              if (matched) return matched;
             }
-          } else {
-            setLeads([]);
-            setSelectedLead(null);
+            return completed[0];
+          });
+          if (completed[0].customer_phone) {
+            setTwilioPhoneNumber(completed[0].customer_phone);
           }
         } else {
           setLeads([]);
           setSelectedLead(null);
         }
-      } catch (err) {
-        console.error("Error loading outbound leads from database:", err);
+      } else {
         setLeads([]);
         setSelectedLead(null);
       }
+    } catch (err) {
+      console.error("Error loading outbound leads from database:", err);
+      setLeads([]);
+      setSelectedLead(null);
+    } finally {
+      setIsLoading(false);
     }
+  };
 
+  useEffect(() => {
     loadData();
-  }, []);
+  }, [testRideInsights]);
 
   // Duration Timer
   useEffect(() => {
@@ -401,6 +417,15 @@ export function OutboundCallSimulator({
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => loadData()}
+            disabled={isLoading}
+            className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 transition-all flex items-center gap-1.5 text-xs font-bold shadow-2xs cursor-pointer disabled:opacity-60"
+            title="Refresh database leads"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-red-600" : ""}`} />
+            <span>{isLoading ? "Refreshing..." : "Refresh Leads"}</span>
+          </button>
           <div className="px-3.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-emerald-600" />
             <span>{leads.length} Test Ride Completed Leads</span>
@@ -439,7 +464,12 @@ export function OutboundCallSimulator({
 
           {/* Lead List Body */}
           <div className="p-3 overflow-y-auto flex-1 space-y-2 divide-y divide-slate-100">
-            {filteredLeads.length === 0 ? (
+            {isLoading ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs">
+                <RefreshCw className="w-5 h-5 animate-spin text-red-600" />
+                <span>Loading completed test rides from database...</span>
+              </div>
+            ) : filteredLeads.length === 0 ? (
               <div className="py-12 text-center text-slate-400 text-xs">
                 No matching completed leads found.
               </div>

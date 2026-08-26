@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -34,22 +35,56 @@ async def get_admin_bookings(
     1. Pre-Sales Transcript (Chat/Voice with Kabir in Showroom)
     2. Test Ride Transcript (In-Vehicle Test Drive with Sales Advisor)
     """
-    # 1. Fetch all bookings with customer ordered latest first
-    stmt = (
+    # 1. Bulk prefetch all data in 5 bulk queries to avoid N+1 DB latency
+    dealer_res = await db.execute(select(Dealership))
+    b_res = await db.execute(
         select(TestDriveBooking)
         .options(selectinload(TestDriveBooking.customer))
         .order_by(desc(TestDriveBooking.created_at))
     )
-    result = await db.execute(stmt)
-    bookings = result.scalars().all()
+    tr_res = await db.execute(select(TestRideRecording).order_by(desc(TestRideRecording.created_at)))
+    out_res = await db.execute(select(OutboundCallLog).order_by(desc(OutboundCallLog.created_at)))
+    logs_res = await db.execute(
+        select(InteractionLog)
+        .options(selectinload(InteractionLog.session))
+        .where(InteractionLog.channel != "TEST_RIDE_IN_VEHICLE")
+        .order_by(InteractionLog.created_at.asc())
+    )
+
+    dealers = dealer_res.scalars().all()
+    bookings = b_res.scalars().all()
+    all_tr_records = tr_res.scalars().all()
+    all_out_records = out_res.scalars().all()
+    all_interaction_logs = logs_res.scalars().all()
+
+    dealer_city_map = {d.id: d.city for d in dealers}
+
+    # Index test ride recordings by booking_id, booking_ref, and customer_id
+    tr_by_cust: dict[int, list[TestRideRecording]] = {}
+    tr_by_booking_id: dict[int, list[TestRideRecording]] = {}
+    tr_by_booking_ref: dict[str, list[TestRideRecording]] = {}
+    for tr in all_tr_records:
+        if tr.customer_id:
+            tr_by_cust.setdefault(tr.customer_id, []).append(tr)
+        if tr.booking_id:
+            tr_by_booking_id.setdefault(tr.booking_id, []).append(tr)
+        if tr.booking_reference:
+            tr_by_booking_ref.setdefault(tr.booking_reference, []).append(tr)
+
+    # Index outbound call logs by customer_id
+    out_by_cust: dict[int, list[OutboundCallLog]] = {}
+    for out in all_out_records:
+        if out.customer_id:
+            out_by_cust.setdefault(out.customer_id, []).append(out)
+
+    # Index interaction logs by customer_id
+    logs_by_cust: dict[int, list[InteractionLog]] = {}
+    for lg in all_interaction_logs:
+        if lg.customer_id:
+            logs_by_cust.setdefault(lg.customer_id, []).append(lg)
 
     admin_records = []
     seen_customer_phones = set()
-
-    # Preload all dealerships into a city map
-    dealer_res = await db.execute(select(Dealership))
-    dealers = dealer_res.scalars().all()
-    dealer_city_map = {d.id: d.city for d in dealers}
 
     # Process confirmed bookings (1 row per unique customer phone)
     for b in bookings:
@@ -67,51 +102,38 @@ async def get_admin_bookings(
         dealership_city = dealer_city_map.get(b.dealership_id, cust.city if cust else "Mumbai")
         cust_city = dealership_city or (cust.city if cust else "Mumbai")
 
-        # A. Fetch Pre-Sales Transcripts (InteractionLog from Showroom / Live Call)
+        # A. Fetch Pre-Sales Transcripts
         presales_turns = []
-        if cust_id:
-            i_stmt = (
-                select(InteractionLog)
-                .options(selectinload(InteractionLog.session))
-                .where(
-                    InteractionLog.customer_id == cust_id,
-                    InteractionLog.channel != "TEST_RIDE_IN_VEHICLE"
-                )
-                .order_by(InteractionLog.created_at.asc())
-            )
-            i_res = await db.execute(i_stmt)
-            logs = i_res.scalars().all()
-            for log in logs:
-                speaker_label = "Customer" if log.speaker == "customer" else "Kabir (AI Specialist)"
-                dt = log.created_at
-                sess = log.session
-                sess_uid = sess.session_id if sess else f"SESS-{dt.strftime('%Y%m%d-%H%M') if dt else 'HISTORIC'}"
-                sess_type = sess.session_type if sess else ("LIVE_VOICE" if log.channel == "VOICE_LIVE" else "CHAT_BOT")
-                sess_veh = (sess.vehicle_id if sess and sess.vehicle_id else b.vehicle_id) or "thar_roxx"
-                v_obj = CatalogService.get_vehicle_by_id(sess_veh)
-                sess_veh_name = v_obj.name if v_obj else sess_veh.replace("_", " ").title()
+        cust_logs = logs_by_cust.get(cust_id, []) if cust_id else []
+        for log in cust_logs:
+            speaker_label = "Customer" if log.speaker == "customer" else "Kabir (AI Specialist)"
+            dt = log.created_at
+            sess = log.session
+            sess_uid = sess.session_id if sess else f"SESS-{dt.strftime('%Y%m%d-%H%M') if dt else 'HISTORIC'}"
+            sess_type = sess.session_type if sess else ("LIVE_VOICE" if log.channel == "VOICE_LIVE" else "CHAT_BOT")
+            sess_veh = (sess.vehicle_id if sess and sess.vehicle_id else b.vehicle_id) or "thar_roxx"
+            v_obj = CatalogService.get_vehicle_by_id(sess_veh)
+            sess_veh_name = v_obj.name if v_obj else sess_veh.replace("_", " ").title()
 
-                presales_turns.append({
-                    "id": log.id,
-                    "session_id": sess_uid,
-                    "session_type": sess_type,
-                    "vehicle_id": sess_veh,
-                    "vehicle_name": sess_veh_name,
-                    "speaker": speaker_label,
-                    "role": log.speaker,
-                    "message": log.message,
-                    "channel": log.channel,
-                    "intent": log.extracted_intent,
-                    "tool": log.tool_triggered,
-                    "date": dt.strftime("%d %b %Y") if dt else "Today",
-                    "full_date": dt.strftime("%A, %d %B %Y") if dt else "Today",
-                    "time": dt.strftime("%I:%M %p") if dt else "",
-                    "timestamp": dt.strftime("%I:%M %p, %d %b %Y") if dt else ""
-                })
+            presales_turns.append({
+                "id": log.id,
+                "session_id": sess_uid,
+                "session_type": sess_type,
+                "vehicle_id": sess_veh,
+                "vehicle_name": sess_veh_name,
+                "speaker": speaker_label,
+                "role": log.speaker,
+                "message": log.message,
+                "channel": log.channel,
+                "intent": log.extracted_intent,
+                "tool": log.tool_triggered,
+                "date": dt.strftime("%d %b %Y") if dt else "Today",
+                "full_date": dt.strftime("%A, %d %B %Y") if dt else "Today",
+                "time": dt.strftime("%I:%M %p") if dt else "",
+                "timestamp": dt.strftime("%I:%M %p, %d %b %Y") if dt else ""
+            })
 
-# No dummy transcripts fallback; only authentic database entries
-
-        # B. Fetch In-Vehicle Test Ride Recording & Audio Transcript (Blank by default until recorded)
+        # B. Fetch In-Vehicle Test Ride Recording & Audio Transcript
         test_ride_turns = []
         test_ride_sessions = []
         sentiment_score = None
@@ -122,122 +144,113 @@ async def get_admin_bookings(
         recommended_action = None
         gcs_recording_uri = None
 
-        if cust_id:
-            tr_stmt = (
-                select(TestRideRecording)
-                .where(
-                    (TestRideRecording.booking_id == b.id) |
-                    (TestRideRecording.booking_reference == b.booking_reference) |
-                    (TestRideRecording.customer_id == cust_id)
-                )
-                .order_by(desc(TestRideRecording.created_at))
-            )
-            tr_res = await db.execute(tr_stmt)
-            all_tr_recs = tr_res.scalars().all()
-            
-            for tr_rec in all_tr_recs:
-                if sentiment_score is None:
-                    sentiment_score = tr_rec.customer_sentiment_score
-                    purchase_intent = tr_rec.purchase_intent_score
-                    loved_features = tr_rec.loved_features or []
-                    objections = tr_rec.objections_raised or []
-                    advisor_feedback = tr_rec.advisor_coaching_feedback
-                    recommended_action = tr_rec.recommended_action
-                    gcs_recording_uri = tr_rec.gcs_uri
+        matched_tr = []
+        if b.id and b.id in tr_by_booking_id:
+            matched_tr.extend(tr_by_booking_id[b.id])
+        if b.booking_reference and b.booking_reference in tr_by_booking_ref:
+            for tr in tr_by_booking_ref[b.booking_reference]:
+                if tr not in matched_tr:
+                    matched_tr.append(tr)
+        if cust_id and cust_id in tr_by_cust:
+            for tr in tr_by_cust[cust_id]:
+                if tr not in matched_tr:
+                    matched_tr.append(tr)
 
-                sess_turns = []
-                if tr_rec.transcript:
-                    for line in tr_rec.transcript.strip().split("\n"):
-                        if ":" in line:
-                            spk, msg = line.split(":", 1)
-                            spk_clean = spk.strip().strip("[]0123456789: ")
-                            msg_clean = msg.strip().strip('"')
-                            is_cust = "customer" in spk_clean.lower() or cust_name.lower() in spk_clean.lower()
-                            turn_dict = {
-                                "speaker": spk.strip(),
-                                "role": "customer" if is_cust else "sales_advisor",
-                                "message": msg_clean,
-                                "timestamp": tr_rec.created_at.strftime("%I:%M %p, %d %b") if tr_rec.created_at else ""
-                            }
-                            sess_turns.append(turn_dict)
-                            if len(test_ride_turns) < 30:
-                                test_ride_turns.append(turn_dict)
+        for tr_rec in matched_tr:
+            if sentiment_score is None:
+                sentiment_score = tr_rec.customer_sentiment_score
+                purchase_intent = tr_rec.purchase_intent_score
+                loved_features = tr_rec.loved_features or []
+                objections = tr_rec.objections_raised or []
+                advisor_feedback = tr_rec.advisor_coaching_feedback
+                recommended_action = tr_rec.recommended_action
+                gcs_recording_uri = tr_rec.gcs_uri
 
-                test_ride_sessions.append({
-                    "session_id": tr_rec.session_id,
-                    "booking_reference": tr_rec.booking_reference or b.booking_reference,
-                    "gcs_uri": tr_rec.gcs_uri,
-                    "vehicle_name": tr_rec.vehicle_name,
-                    "sales_advisor_name": tr_rec.sales_advisor_name,
-                    "duration_seconds": tr_rec.duration_seconds,
-                    "sentiment_score": tr_rec.customer_sentiment_score,
-                    "purchase_intent": tr_rec.purchase_intent_score,
-                    "loved_features": tr_rec.loved_features or [],
-                    "objections_raised": tr_rec.objections_raised or [],
-                    "advisor_coaching_feedback": tr_rec.advisor_coaching_feedback,
-                    "recommended_action": tr_rec.recommended_action,
-                    "turns": sess_turns,
-                    "created_at": tr_rec.created_at.strftime("%Y-%m-%d %H:%M:%S") if tr_rec.created_at else ""
-                })
+            sess_turns = []
+            if tr_rec.transcript:
+                for line in tr_rec.transcript.strip().split("\n"):
+                    if ":" in line:
+                        spk, msg = line.split(":", 1)
+                        spk_clean = spk.strip().strip("[]0123456789: ")
+                        msg_clean = msg.strip().strip('"')
+                        is_cust = "customer" in spk_clean.lower() or cust_name.lower() in spk_clean.lower()
+                        turn_dict = {
+                            "speaker": spk.strip(),
+                            "role": "customer" if is_cust else "sales_advisor",
+                            "message": msg_clean,
+                            "timestamp": tr_rec.created_at.strftime("%I:%M %p, %d %b") if tr_rec.created_at else ""
+                        }
+                        sess_turns.append(turn_dict)
+                        if len(test_ride_turns) < 30:
+                            test_ride_turns.append(turn_dict)
 
-        
+            test_ride_sessions.append({
+                "session_id": tr_rec.session_id,
+                "booking_reference": tr_rec.booking_reference or b.booking_reference,
+                "gcs_uri": tr_rec.gcs_uri,
+                "vehicle_name": tr_rec.vehicle_name,
+                "sales_advisor_name": tr_rec.sales_advisor_name,
+                "duration_seconds": tr_rec.duration_seconds,
+                "sentiment_score": tr_rec.customer_sentiment_score,
+                "purchase_intent": tr_rec.purchase_intent_score,
+                "loved_features": tr_rec.loved_features or [],
+                "objections_raised": tr_rec.objections_raised or [],
+                "advisor_coaching_feedback": tr_rec.advisor_coaching_feedback,
+                "recommended_action": tr_rec.recommended_action,
+                "turns": sess_turns,
+                "created_at": tr_rec.created_at.strftime("%Y-%m-%d %H:%M:%S") if tr_rec.created_at else ""
+            })
+
         # C. Fetch Outbound Feedback Call Transcripts (OutboundCallLog)
         outbound_turns = []
         outbound_sessions = []
-        if cust_id:
-            out_stmt = (
-                select(OutboundCallLog)
-                .where(OutboundCallLog.customer_id == cust_id)
-                .order_by(desc(OutboundCallLog.created_at))
-            )
-            out_res = await db.execute(out_stmt)
-            all_out_recs = out_res.scalars().all()
-            for out_rec in all_out_recs:
-                sess_turns = []
-                if out_rec.transcript and out_rec.transcript.strip():
-                    import re
-                    for line in out_rec.transcript.strip().split("\n"):
-                        line = line.strip()
-                        if not line:
-                            continue
-                        m = re.match(r'^(?:\[([0-9:]+)\]\s*)?([^:]+):\s*"?([^"]*)"?$', line)
-                        if m:
-                            tm_tag, spk, msg = m.group(1), m.group(2).strip(), m.group(3).strip()
-                            is_cust = "customer" in spk.lower() or cust_name.lower() in spk.lower()
-                            turn_dict = {
-                                "speaker": spk,
-                                "role": "customer" if is_cust else "kavya_ai",
-                                "message": msg,
-                                "timestamp": tm_tag or (out_rec.created_at.strftime("%I:%M %p, %d %b") if out_rec.created_at else "")
-                            }
-                            sess_turns.append(turn_dict)
-                        elif ":" in line:
-                            parts = line.split(":", 1)
-                            spk = parts[0].strip()
-                            msg = parts[1].strip().strip('"')
-                            is_cust = "customer" in spk.lower() or cust_name.lower() in spk.lower()
-                            turn_dict = {
-                                "speaker": spk,
-                                "role": "customer" if is_cust else "kavya_ai",
-                                "message": msg,
-                                "timestamp": out_rec.created_at.strftime("%I:%M %p, %d %b") if out_rec.created_at else ""
-                            }
-                            sess_turns.append(turn_dict)
+        matched_out = out_by_cust.get(cust_id, []) if cust_id else []
+        for out_rec in matched_out:
+            sess_turns = []
+            if out_rec.transcript and out_rec.transcript.strip():
+                import re
+                for line in out_rec.transcript.strip().split("\n"):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    m = re.match(r'^(?:\[([0-9:]+)\]\s*)?([^:]+):\s*"?([^"]*)"?$', line)
+                    if m:
+                        tm_tag, spk, msg = m.group(1), m.group(2).strip(), m.group(3).strip()
+                        is_cust = "customer" in spk.lower() or cust_name.lower() in spk.lower()
+                        turn_dict = {
+                            "speaker": spk,
+                            "role": "customer" if is_cust else "kavya_ai",
+                            "message": msg,
+                            "timestamp": tm_tag or (out_rec.created_at.strftime("%I:%M %p, %d %b") if out_rec.created_at else "")
+                        }
+                        sess_turns.append(turn_dict)
+                    elif ":" in line:
+                        parts = line.split(":", 1)
+                        spk = parts[0].strip()
+                        msg = parts[1].strip().strip('"')
+                        is_cust = "customer" in spk.lower() or cust_name.lower() in spk.lower()
+                        turn_dict = {
+                            "speaker": spk,
+                            "role": "customer" if is_cust else "kavya_ai",
+                            "message": msg,
+                            "timestamp": out_rec.created_at.strftime("%I:%M %p, %d %b") if out_rec.created_at else ""
+                        }
+                        sess_turns.append(turn_dict)
 
-                if sess_turns and not outbound_turns:
-                    outbound_turns = sess_turns
+            if sess_turns and not outbound_turns:
+                outbound_turns = sess_turns
 
-                outbound_sessions.append({
-                    "call_reference": out_rec.call_reference,
-                    "phone_number": out_rec.phone_number,
-                    "agent_name": out_rec.agent_name,
-                    "call_status": out_rec.call_status,
-                    "call_duration_seconds": out_rec.call_duration_seconds,
-                    "sentiment": out_rec.customer_sentiment,
-                    "decision": out_rec.customer_decision,
-                    "turns": sess_turns,
-                    "created_at": out_rec.created_at.strftime("%Y-%m-%d %H:%M:%S") if out_rec.created_at else ""
-                })
+            outbound_sessions.append({
+                "call_reference": out_rec.call_reference,
+                "phone_number": out_rec.phone_number,
+                "agent_name": out_rec.agent_name,
+                "call_status": out_rec.call_status,
+                "call_duration_seconds": out_rec.call_duration_seconds,
+                "sentiment": out_rec.customer_sentiment,
+                "decision": out_rec.customer_decision,
+                "turns": sess_turns,
+                "created_at": out_rec.created_at.strftime("%Y-%m-%d %H:%M:%S") if out_rec.created_at else ""
+            })
 
         # Vehicle display name
         v_info = CatalogService.get_vehicle_by_id(b.vehicle_id)

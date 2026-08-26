@@ -3,6 +3,7 @@ export class LiveAudioOutputManager {
   private initialized = false;
   private nextPlayTime = 0;
   private activeSources: AudioBufferSourceNode[] = [];
+  public onPlaybackStateChange?: (isPlaying: boolean) => void;
 
   async initializeAudioContext(): Promise<void> {
     try {
@@ -15,7 +16,6 @@ export class LiveAudioOutputManager {
       }
       this.nextPlayTime = this.audioContext.currentTime;
       this.initialized = true;
-      console.log("[LiveAudioOutputManager] AudioContext running at", this.audioContext.sampleRate, "Hz");
     } catch (e) {
       console.error("[LiveAudioOutputManager] Failed to init AudioContext:", e);
     }
@@ -46,14 +46,24 @@ export class LiveAudioOutputManager {
       source.connect(this.audioContext.destination);
 
       const now = this.audioContext.currentTime;
-      const startTime = Math.max(now, this.nextPlayTime);
+      if (this.nextPlayTime < now || this.nextPlayTime > now + 1.0) {
+        this.nextPlayTime = now;
+      }
+      const startTime = this.nextPlayTime;
       source.start(startTime);
       this.nextPlayTime = startTime + audioBuffer.duration;
 
       this.activeSources.push(source);
+      if (this.onPlaybackStateChange) {
+        this.onPlaybackStateChange(true);
+      }
+
       source.onended = () => {
         const idx = this.activeSources.indexOf(source);
         if (idx > -1) this.activeSources.splice(idx, 1);
+        if (this.activeSources.length === 0 && this.onPlaybackStateChange) {
+          this.onPlaybackStateChange(false);
+        }
       };
     } catch (error) {
       console.error("[LiveAudioOutputManager] Error playing chunk:", error);
@@ -71,6 +81,9 @@ export class LiveAudioOutputManager {
       this.activeSources = [];
       if (this.audioContext) {
         this.nextPlayTime = this.audioContext.currentTime;
+      }
+      if (this.onPlaybackStateChange) {
+        this.onPlaybackStateChange(false);
       }
     } catch (e) {
       console.warn("[LiveAudioOutputManager] Error interrupting audio:", e);

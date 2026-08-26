@@ -19,7 +19,7 @@ _TWILIO_CACHE: Dict[str, Optional[str]] = {
     "phone_number": os.getenv("TWILIO_PHONE_NUMBER", "+13369154920"),
     "whatsapp_number": os.getenv("TWILIO_WHATSAPP_NUMBER", "+14155238886")
 }
-
+_SECRETS_CHECKED = False
 
 def _get_gcp_secret(secret_name: str) -> Optional[str]:
     """Retrieves secret from GCP Secret Manager via gcloud CLI fallback."""
@@ -30,7 +30,7 @@ def _get_gcp_secret(secret_name: str) -> Optional[str]:
                 capture_output=True,
                 text=True,
                 check=True,
-                timeout=4.0
+                timeout=1.0
             )
             val = res.stdout.strip()
             if val:
@@ -42,10 +42,13 @@ def _get_gcp_secret(secret_name: str) -> Optional[str]:
 
 def get_twilio_credentials() -> Dict[str, Optional[str]]:
     """Resolves Twilio credentials from environment or GCP Secret Manager."""
-    if not _TWILIO_CACHE["account_sid"]:
-        _TWILIO_CACHE["account_sid"] = _get_gcp_secret("TWILIO_ACCOUNT_SID")
-    if not _TWILIO_CACHE["auth_token"]:
-        _TWILIO_CACHE["auth_token"] = _get_gcp_secret("TWILIO_AUTH_TOKEN")
+    global _SECRETS_CHECKED
+    if not _SECRETS_CHECKED:
+        _SECRETS_CHECKED = True
+        if not _TWILIO_CACHE["account_sid"]:
+            _TWILIO_CACHE["account_sid"] = _get_gcp_secret("TWILIO_ACCOUNT_SID")
+        if not _TWILIO_CACHE["auth_token"]:
+            _TWILIO_CACHE["auth_token"] = _get_gcp_secret("TWILIO_AUTH_TOKEN")
     return _TWILIO_CACHE
 
 

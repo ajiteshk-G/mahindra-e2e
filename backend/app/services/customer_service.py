@@ -91,6 +91,7 @@ class CustomerService:
         # Fallback to demo profile
         stmt = (
             select(Customer)
+            .where(Customer.customer_id == "CUST-9820155432")
             .options(
                 selectinload(Customer.sessions).selectinload(ConversationSession.transcripts),
                 selectinload(Customer.interactions),

@@ -414,26 +414,7 @@ async def live_audio_websocket(websocket: WebSocket):
                                     elif msg_type == "USER_CHAT":
                                         user_text = payload.get("text", "")
                                         if user_text:
-                                            # Real-time persistence of customer turns & checklist extraction
-                                            async with AsyncSessionLocal() as db_sess:
-                                                await CustomerService.log_interaction(
-                                                    db_sess,
-                                                    customer_id_str=customer.customer_id,
-                                                    speaker="customer",
-                                                    message=user_text,
-                                                    channel="VOICE_LIVE",
-                                                    session_id_str=session_id
-                                                )
-                                                from app.services.checklist_service import ChecklistService
-                                                veh_k = session_mgr.active_vehicle_id or customer.interested_vehicle_id or "thar_roxx"
-                                                new_chk = ChecklistService.extract_checklist_items(user_text, vehicle_id=veh_k)
-                                                if new_chk:
-                                                    await ChecklistService.update_customer_and_booking_checklist(
-                                                        db_sess,
-                                                        customer_id_str=customer.customer_id,
-                                                        vehicle_id=veh_k,
-                                                        new_items=new_chk
-                                                    )
+                                            # Send turn immediately to Gemini Live without blocking on DB
                                             bidi_turn = {
                                                 "clientContent": {
                                                     "turns": [
@@ -446,6 +427,33 @@ async def live_audio_websocket(websocket: WebSocket):
                                                 }
                                             }
                                             await bidi_ws.send(json.dumps(bidi_turn))
+
+                                            # Asynchronous background persistence
+                                            async def _async_log_user_turn(txt: str):
+                                                try:
+                                                    async with AsyncSessionLocal() as db_sess:
+                                                        await CustomerService.log_interaction(
+                                                            db_sess,
+                                                            customer_id_str=customer.customer_id,
+                                                            speaker="customer",
+                                                            message=txt,
+                                                            channel="VOICE_LIVE",
+                                                            session_id_str=session_id
+                                                        )
+                                                        from app.services.checklist_service import ChecklistService
+                                                        veh_k = session_mgr.active_vehicle_id or customer.interested_vehicle_id or "thar_roxx"
+                                                        new_chk = ChecklistService.extract_checklist_items(txt, vehicle_id=veh_k)
+                                                        if new_chk:
+                                                            await ChecklistService.update_customer_and_booking_checklist(
+                                                                db_sess,
+                                                                customer_id_str=customer.customer_id,
+                                                                vehicle_id=veh_k,
+                                                                new_items=new_chk
+                                                            )
+                                                except Exception as err:
+                                                    logger.debug(f"User interaction log notice: {err}")
+
+                                            asyncio.create_task(_async_log_user_turn(user_text))
                             elif "bytes" in data and data["bytes"]:
                                 import base64
                                 pcm_b64 = base64.b64encode(data["bytes"]).decode("utf-8")
@@ -528,30 +536,37 @@ async def live_audio_websocket(websocket: WebSocket):
                                 in_trans = server_content.get("inputTranscription")
                                 if in_trans and in_trans.get("text"):
                                     speech_txt = in_trans["text"]
-                                    async with AsyncSessionLocal() as db_sess:
-                                        await CustomerService.log_interaction(
-                                            db_sess,
-                                            customer_id_str=customer.customer_id,
-                                            speaker="customer",
-                                            message=speech_txt,
-                                            channel="VOICE_LIVE",
-                                            session_id_str=session_id
-                                        )
-                                        from app.services.checklist_service import ChecklistService
-                                        veh_k = session_mgr.active_vehicle_id or customer.interested_vehicle_id or "thar_roxx"
-                                        new_chk = ChecklistService.extract_checklist_items(speech_txt, vehicle_id=veh_k)
-                                        if new_chk:
-                                            await ChecklistService.update_customer_and_booking_checklist(
-                                                db_sess,
-                                                customer_id_str=customer.customer_id,
-                                                vehicle_id=veh_k,
-                                                new_items=new_chk
-                                            )
                                     await websocket.send_text(json.dumps({
                                         "type": "USER_TRANSCRIPTION",
                                         "speaker": "customer",
                                         "message": speech_txt
                                     }))
+
+                                    async def _async_log_speech(txt: str):
+                                        try:
+                                            async with AsyncSessionLocal() as db_sess:
+                                                await CustomerService.log_interaction(
+                                                    db_sess,
+                                                    customer_id_str=customer.customer_id,
+                                                    speaker="customer",
+                                                    message=txt,
+                                                    channel="VOICE_LIVE",
+                                                    session_id_str=session_id
+                                                )
+                                                from app.services.checklist_service import ChecklistService
+                                                veh_k = session_mgr.active_vehicle_id or customer.interested_vehicle_id or "thar_roxx"
+                                                new_chk = ChecklistService.extract_checklist_items(txt, vehicle_id=veh_k)
+                                                if new_chk:
+                                                    await ChecklistService.update_customer_and_booking_checklist(
+                                                        db_sess,
+                                                        customer_id_str=customer.customer_id,
+                                                        vehicle_id=veh_k,
+                                                        new_items=new_chk
+                                                    )
+                                        except Exception as err:
+                                            logger.debug(f"Speech log notice: {err}")
+
+                                    asyncio.create_task(_async_log_speech(speech_txt))
 
                                 # 3. Process Video, Audio, and Text parts
                                 for part in parts:

@@ -37,16 +37,18 @@ async def clean_database():
             "conversation_transcripts",
             "interaction_logs",
             "conversation_sessions",
+            "insurance_claims",
             "claims",
             "customers"
         ]
 
-        active_to_clean = [t for t in tables_to_clean if t in existing_tables]
-        if active_to_clean:
-            stmt = f"TRUNCATE TABLE {', '.join(active_to_clean)} CASCADE;"
-            logger.info(f"Executing: {stmt}")
-            await conn.execute(text(stmt))
-            logger.info("✓ Successfully cleaned test ride bookings, transcripts, and customer records.")
+        for t in tables_to_clean:
+            if t in existing_tables:
+                try:
+                    await conn.execute(text(f"DELETE FROM {t};"))
+                except Exception as e:
+                    logger.debug(f"Table delete notice ({t}): {e}")
+        logger.info("✓ Successfully cleaned test ride bookings, transcripts, and customer records.")
 
     # Re-seed default customer Aarav Sharma
     from app.services.customer_service import CustomerService

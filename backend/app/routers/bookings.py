@@ -1,6 +1,7 @@
 import time
 import datetime
 import logging
+import asyncio
 from datetime import datetime as dt, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,7 +11,7 @@ from sqlalchemy import func
 from app.database import get_db
 from app.models.booking import TestDriveBooking, TestDriveSlot, PublicHoliday, SlotConfig
 from app.models.dealership import Dealership
-from app.models.customer import Customer
+from app.models.customer import Customer, InteractionLog, ConversationSession
 from app.schemas.booking import (
     TestDriveBookingCreate,
     TestDriveBookingResponse,
@@ -285,6 +286,34 @@ async def reserve_test_drive_slot(
         vehicle_id=req.vehicle_id
     )
 
+    # Idempotency check: if customer already reserved this exact slot, return existing booking
+    existing_b_stmt = select(TestDriveBooking).where(
+        TestDriveBooking.customer_id == customer.id,
+        TestDriveBooking.vehicle_id == req.vehicle_id,
+        TestDriveBooking.scheduled_date == req.slot_date,
+        TestDriveBooking.scheduled_time_slot == req.slot_time
+    )
+    existing_b_res = await db.execute(existing_b_stmt)
+    existing_booking = existing_b_res.scalars().first()
+    if existing_booking:
+        v_info = CatalogService.get_vehicle_by_id(req.vehicle_id)
+        return SlotReserveResponse(
+            success=True,
+            message=f"Test Ride is already reserved for {req.customer_name} on {req.slot_date} at {req.slot_time} ({dealership_name}).",
+            booking_reference=existing_booking.booking_reference,
+            slot_date=req.slot_date,
+            slot_time=req.slot_time,
+            booking_type=existing_booking.booking_type or "HOME_DOORSTEP",
+            vehicle_name=v_info.name if v_info else "Mahindra SUV",
+            dealership_name=dealership_name,
+            sales_advisor_name=advisor_name,
+            customer_name=req.customer_name,
+            customer_phone=req.customer_phone,
+            delivery_address=req.delivery_address,
+            pin_code=req.pin_code,
+            whatsapp_dispatched=True
+        )
+
     booking_ref = f"BK-MAH-{int(time.time()) % 100000}"
 
     # 6. Check and update slot in DB
@@ -386,9 +415,9 @@ async def reserve_test_drive_slot(
 
     await db.commit()
 
-    # 9. Send Twilio SMS immediately upon test drive confirmation
-    try:
-        await NotificationService.send_test_drive_confirmation(
+    # 9. Dispatch Twilio SMS asynchronously in background
+    asyncio.create_task(
+        NotificationService.send_test_drive_confirmation(
             customer_phone=req.customer_phone,
             customer_name=req.customer_name,
             booking_reference=booking_ref,
@@ -402,9 +431,7 @@ async def reserve_test_drive_slot(
             delivery_address=req.delivery_address,
             pin_code=req.pin_code
         )
-        logger.info(f"Twilio SMS confirmation dispatched to {req.customer_phone} for booking {booking_ref}")
-    except Exception as sms_err:
-        logger.warning(f"Twilio SMS dispatch notice: {sms_err}")
+    )
 
     return SlotReserveResponse(
         success=True,

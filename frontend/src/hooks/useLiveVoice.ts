@@ -19,6 +19,7 @@ export const KABIR_AUDIO_GREETING =
 export function useLiveVoice(onUiEvent?: (event: any) => void) {
   const [isConnected, setIsConnected] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
+  const [isAssistantSpeaking, setIsAssistantSpeaking] = useState(false);
   const [rmsLevel, setRmsLevel] = useState(0);
   const [messages, setMessages] = useState<LiveMessage[]>([]);
   const [activeLanguage, setActiveLanguage] = useState("Hinglish");
@@ -35,7 +36,16 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
   const videoOutputManagerRef = useRef<LiveVideoOutputManager | null>(null);
 
   useEffect(() => {
-    audioOutputManagerRef.current = new LiveAudioOutputManager();
+    const audioMgr = new LiveAudioOutputManager();
+    audioMgr.onPlaybackStateChange = (playing) => {
+      setIsAssistantSpeaking(playing);
+      if (playing) {
+        setRmsLevel(0.45);
+      } else {
+        setRmsLevel(0);
+      }
+    };
+    audioOutputManagerRef.current = audioMgr;
     videoOutputManagerRef.current = new LiveVideoOutputManager();
   }, []);
 
@@ -344,7 +354,15 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
       };
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
       mediaStreamRef.current = stream;
 
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({
@@ -362,15 +380,14 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
 
         workletNode.port.onmessage = (e) => {
           const { pcm16, rms } = e.data;
-          setRmsLevel(rms * 3.0);
-
+          // Only send mic packets when WebSocket is open
           if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
             socketRef.current.send(pcm16);
           }
         };
 
         source.connect(workletNode);
-        workletNode.connect(audioCtx.destination);
+        // Note: Do NOT connect to audioCtx.destination to prevent microphone feedback loop
       } catch (workletError) {
         // Fallback for older browsers
         const processor = audioCtx.createScriptProcessor(4096, 1, 1);
@@ -379,15 +396,10 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
         processor.onaudioprocess = (e) => {
           const inputData = e.inputBuffer.getChannelData(0);
           const pcm16 = new Int16Array(inputData.length);
-          let sumSquares = 0;
           for (let i = 0; i < inputData.length; i++) {
             const s = Math.max(-1, Math.min(1, inputData[i]));
             pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-            sumSquares += s * s;
           }
-
-          const rms = Math.sqrt(sumSquares / inputData.length);
-          setRmsLevel(rms * 3.0);
 
           if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
             socketRef.current.send(pcm16.buffer);
@@ -395,7 +407,7 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
         };
 
         source.connect(processor);
-        processor.connect(audioCtx.destination);
+        // Note: Do NOT connect to audioCtx.destination to prevent microphone feedback loop
       }
 
 // Native audio streaming only - No TTS / STT
@@ -546,6 +558,7 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
   return {
     isConnected,
     isRecording,
+    isAssistantSpeaking,
     rmsLevel,
     messages,
     activeLanguage,

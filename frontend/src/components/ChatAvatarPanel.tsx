@@ -30,6 +30,7 @@ import {
 interface ChatAvatarPanelProps {
   isRecording: boolean;
   rmsLevel: number;
+  isAssistantSpeaking?: boolean;
   messages: LiveMessage[];
   activeLanguage: string;
   onToggleRecording: (customerName?: string, customerPhone?: string, vehicleId?: string) => void;
@@ -45,6 +46,7 @@ interface ChatAvatarPanelProps {
 export function ChatAvatarPanel({
   isRecording,
   rmsLevel,
+  isAssistantSpeaking = false,
   messages,
   activeLanguage,
   onToggleRecording,
@@ -253,7 +255,7 @@ export function ChatAvatarPanel({
     }
   }, [isVideoActive]);
 
-  const isSpeaking = rmsLevel > 0.05;
+  const isSpeaking = Boolean(isAssistantSpeaking);
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
