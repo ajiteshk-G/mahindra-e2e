@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { triggerOutboundCall, sendOutboundDialogueTurn, fetchOutboundCallInsights } from "@/lib/api";
 import {
   Search,
   Filter,
@@ -21,6 +22,8 @@ import {
   ThumbsUp,
   X,
   Phone,
+  PhoneCall,
+  PhoneOff,
   Layers,
   Send,
   RefreshCw,
@@ -113,6 +116,100 @@ export function AdminBookingsTable() {
   // Modal / Drawer state for transcript viewing
   const [activeModalBooking, setActiveModalBooking] = useState<AdminBookingRecord | null>(null);
   const [activeTranscriptTab, setActiveTranscriptTab] = useState<"presales" | "test_ride">("presales");
+  
+  // Outbound Feedback Call Modal State
+  const [activeOutboundBooking, setActiveOutboundBooking] = useState<AdminBookingRecord | null>(null);
+  const [outboundCallState, setOutboundCallState] = useState<"idle" | "calling" | "connected" | "ended">("idle");
+  const [outboundReference, setOutboundReference] = useState<string>("");
+  const [outboundDialogue, setOutboundDialogue] = useState<Array<{ speaker: string; text: string; time: string }>>([]);
+  const [outboundTurnIndex, setOutboundTurnIndex] = useState<number>(0);
+  const [isAiSpeaking, setIsAiSpeaking] = useState<boolean>(false);
+  const [callDurationSec, setCallDurationSec] = useState<number>(0);
+  const callTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (outboundCallState === "connected") {
+      callTimerRef.current = setInterval(() => {
+        setCallDurationSec((prev) => prev + 1);
+      }, 1000);
+    } else if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+    }
+    return () => {
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+    };
+  }, [outboundCallState]);
+
+  const handleStartOutboundCall = async (b: AdminBookingRecord) => {
+    setOutboundCallState("calling");
+    setOutboundDialogue([]);
+    setOutboundTurnIndex(0);
+    setCallDurationSec(0);
+
+    try {
+      const resp = await triggerOutboundCall({
+        customer_id: b.customer_id,
+        customer_name: b.customer_name,
+        phone_number: b.customer_phone,
+        vehicle_name: b.vehicle_name,
+        variant: b.variant,
+        dealership_name: b.dealership_name,
+        booking_reference: b.booking_reference
+      });
+
+      setOutboundReference(resp.call_reference || `CALL-MIA-${Date.now().toString().slice(-4)}`);
+      
+      // Ring for 2.5 seconds then connect
+      setTimeout(() => {
+        setOutboundCallState("connected");
+        const greeting = `Namaste ${b.customer_name} ji! Main Mahindra Bayview Motors se MIA baat kar rahi hoon. Aapka ${b.vehicle_name} ka test drive experience kaisa raha?`;
+        setOutboundDialogue([
+          { speaker: "MIA (Mahindra AI Voice Specialist)", text: greeting, time: "00:02" }
+        ]);
+        setOutboundTurnIndex(1);
+      }, 2500);
+    } catch (e) {
+      console.error("Failed to start outbound call:", e);
+      setOutboundCallState("idle");
+    }
+  };
+
+  const handleSendCustomerResponse = async (userText: string) => {
+    if (!activeOutboundBooking || outboundCallState !== "connected") return;
+    
+    const nowTime = String(Math.floor(callDurationSec / 60)).padStart(2, '0') + ":" + String(callDurationSec % 60).padStart(2, '0');
+    setOutboundDialogue((prev) => [
+      ...prev,
+      { speaker: `${activeOutboundBooking.customer_name} (Customer)`, text: userText, time: nowTime }
+    ]);
+
+    setIsAiSpeaking(true);
+
+    try {
+      const turnResp = await sendOutboundDialogueTurn({
+        call_reference: outboundReference,
+        customer_response: userText,
+        turn_number: outboundTurnIndex + 1
+      });
+
+      setOutboundTurnIndex((prev) => prev + 1);
+      
+      setTimeout(() => {
+        setIsAiSpeaking(false);
+        const replyTime = String(Math.floor((callDurationSec + 2) / 60)).padStart(2, '0') + ":" + String((callDurationSec + 2) % 60).padStart(2, '0');
+        setOutboundDialogue((prev) => [
+          ...prev,
+          { speaker: "MIA (Mahindra AI Voice Specialist)", text: turnResp.ai_reply || "Shukriya sir! Main turant aapka allocation lock karke digital financing details SMS aur WhatsApp par bhej rahi hoon.", time: replyTime }
+        ]);
+      }, 1200);
+    } catch (e) {
+      setIsAiSpeaking(false);
+    }
+  };
+
+  const handleEndOutboundCall = () => {
+    setOutboundCallState("ended");
+  };
 
   const fetchBookings = async () => {
     setIsLoading(true);
@@ -314,12 +411,13 @@ export function AdminBookingsTable() {
                   </span>
                 </th>
                 <th className="py-3.5 px-4 font-bold text-center">Status / SMS</th>
+                <th className="py-3.5 px-4 font-bold text-center text-red-700 min-w-[170px]"><span className="flex items-center justify-center gap-1"><PhoneCall className="w-3.5 h-3.5 text-red-600" /> Outbound Call</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-800">
               {isLoading && bookings.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-500">
+                  <td colSpan={8} className="py-12 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <RefreshCw className="w-6 h-6 animate-spin text-red-600" />
                       <span>Loading booked test rides from database...</span>
@@ -328,7 +426,7 @@ export function AdminBookingsTable() {
                 </tr>
               ) : bookings.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-500">
+                  <td colSpan={8} className="py-12 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center gap-1">
                       <AlertCircle className="w-6 h-6 text-amber-500" />
                       <span className="font-bold text-slate-800">No test ride bookings matched your filter.</span>
@@ -495,6 +593,32 @@ export function AdminBookingsTable() {
                           <span>Twilio SMS Sent</span>
                         </div>
                       </td>
+
+                      {/* Column 8: Outbound Feedback Call */}
+                      <td className="py-4 px-4 align-top text-center">
+                        {booking.status === "TestRide_Completed" || booking.test_ride_transcript.length > 0 ? (
+                          <div className="space-y-1">
+                            <button
+                              onClick={() => {
+                                setActiveOutboundBooking(booking);
+                                handleStartOutboundCall(booking);
+                              }}
+                              className="w-full px-3 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white text-[11px] font-bold shadow-xs hover:shadow-sm flex items-center justify-center gap-1.5 transition-all hover:scale-102 cursor-pointer"
+                            >
+                              <PhoneCall className="w-3.5 h-3.5 animate-pulse text-white" />
+                              <span>Outbound Feedback Call</span>
+                            </button>
+                            <span className="text-[9.5px] text-emerald-700 font-bold block">
+                              ✓ Ready for Post-Ride AI Call
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-400 text-[10px] flex items-center justify-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <span>Requires Test Ride</span>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   );
                 })
@@ -503,6 +627,158 @@ export function AdminBookingsTable() {
           </table>
         </div>
       </div>
+
+      {/* Outbound Feedback Call Modal */}
+      {activeOutboundBooking && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-left text-slate-900">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-200 bg-gradient-to-r from-red-50 to-amber-50 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-red-600 text-white flex items-center justify-center shadow-md">
+                  <PhoneCall className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                    <span>MIA Proactive Post-Ride Outbound Voice Call</span>
+                    <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-200 text-[9.5px] font-bold">
+                      Stage 3 AI Loop
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-600">
+                    Customer: <strong className="text-slate-900">{activeOutboundBooking.customer_name}</strong> ({activeOutboundBooking.customer_phone}) • {activeOutboundBooking.vehicle_name}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  handleEndOutboundCall();
+                  setActiveOutboundBooking(null);
+                }}
+                className="p-1.5 rounded-xl bg-slate-200/80 hover:bg-slate-300 text-slate-700 transition-all text-xs cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+              {/* Call Status Banner */}
+              <div className="p-4 rounded-2xl bg-slate-900 text-white flex items-center justify-between shadow-md">
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${outboundCallState === "connected" ? "bg-emerald-400 animate-pulse" : outboundCallState === "calling" ? "bg-amber-400 animate-ping" : "bg-slate-500"}`}></div>
+                  <div>
+                    <div className="text-xs font-bold font-mono tracking-wider text-slate-200 uppercase">
+                      {outboundCallState === "calling" ? "📞 Dialing Customer..." : outboundCallState === "connected" ? "🟢 Call Active • Connected to Customer" : "🔴 Call Completed"}
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono">
+                      Caller ID: MIA Voice Agent (+91 22 6900 1000) • Booking Ref: {activeOutboundBooking.booking_reference}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <span className="text-xs font-black font-mono text-emerald-400">
+                    {String(Math.floor(callDurationSec / 60)).padStart(2, '0')}:{String(callDurationSec % 60).padStart(2, '0')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Live Multi-Turn Dialogue Transcript */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 min-h-[220px] max-h-[300px] overflow-y-auto">
+                {outboundDialogue.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 text-xs space-y-2">
+                    <RefreshCw className="w-5 h-5 animate-spin text-red-600 mx-auto" />
+                    <p>Connecting voice channel with {activeOutboundBooking.customer_name}...</p>
+                  </div>
+                ) : (
+                  outboundDialogue.map((turn, i) => {
+                    const isAi = turn.speaker.includes("MIA") || turn.speaker.includes("Specialist");
+                    return (
+                      <div key={i} className={`flex flex-col ${isAi ? "items-start" : "items-end"}`}>
+                        <div className="text-[10px] text-slate-500 mb-0.5 px-1 font-bold">
+                          {turn.speaker} <span className="font-mono text-slate-400 font-normal">• {turn.time}</span>
+                        </div>
+                        <div
+                          className={`p-3 rounded-2xl max-w-[85%] text-xs leading-relaxed shadow-2xs ${
+                            isAi
+                              ? "bg-white border border-slate-200 text-slate-900 rounded-tl-xs"
+                              : "bg-red-50 border border-red-200 text-red-950 rounded-tr-xs font-medium"
+                          }`}
+                        >
+                          {turn.text}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                {isAiSpeaking && (
+                  <div className="flex items-center gap-2 text-xs text-red-600 italic px-2">
+                    <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                    <span>MIA Voice Agent is speaking...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Interactive Quick Response Prompts */}
+              {outboundCallState === "connected" && (
+                <div className="space-y-2 pt-1">
+                  <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
+                    Simulate Customer Response:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      "Drive bahut zabardast tha! Lekin delivery timeline kitna rahega?",
+                      "Suspension aur power top-class hai. Flexible EMI options kya hain?",
+                      "Bahut pasand aaya! Stealth Black AX7L ki booking finalize kar dijiye."
+                    ].map((replyText, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSendCustomerResponse(replyText)}
+                        disabled={isAiSpeaking}
+                        className="px-3 py-1.5 rounded-xl bg-white hover:bg-red-50 border border-slate-200 hover:border-red-300 text-slate-800 hover:text-red-900 text-xs font-semibold shadow-2xs transition-all cursor-pointer disabled:opacity-50 text-left"
+                      >
+                        💬 &ldquo;{replyText}&rdquo;
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              {outboundCallState === "connected" ? (
+                <button
+                  onClick={handleEndOutboundCall}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <PhoneOff className="w-4 h-4" />
+                  <span>End Outbound Call</span>
+                </button>
+              ) : outboundCallState === "ended" ? (
+                <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Customer feedback captured • Fast-track allocation confirmed</span>
+                </span>
+              ) : (
+                <span></span>
+              )}
+
+              <button
+                onClick={() => {
+                  handleEndOutboundCall();
+                  setActiveOutboundBooking(null);
+                }}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Close Window
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Interactive Transcript Modal / Drawer (Light Theme) */}
       {activeModalBooking && (
