@@ -15,14 +15,6 @@ from app.schemas.booking import (
     TestDriveBookingCreate,
     TestDriveBookingResponse
 )
-from app.schemas.kyc import (
-    KYCScanRequest,
-    KYCScanResponse,
-    VoiceConsentRequest,
-    VoiceConsentResponse,
-    FinancingCalculationRequest,
-    FinancingCalculationResponse
-)
 from app.schemas.diagnostics import (
     DamageAssessmentRequest,
     DamageAssessmentResponse,
@@ -31,4 +23,9 @@ from app.schemas.diagnostics import (
     ClaimSubmissionRequest,
     ClaimSubmissionResponse
 )
-
+from app.schemas.outbound_call import (
+    OutboundCallTriggerRequest,
+    OutboundDialogueTurnRequest,
+    OutboundDialogueTurnResponse,
+    OutboundCallInsightsResponse
+)
