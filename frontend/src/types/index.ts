@@ -62,21 +62,7 @@ export interface CustomerProfile {
   insurance_type?: string;
 }
 
-export interface TelematicsData {
-  vin: string;
-  vehicle_name: string;
-  odometer_km: number;
-  service_due_km: number;
-  oil_viscosity_pct: number;
-  battery_soc_pct: number;
-  distance_to_empty_km: number;
-  tpms_front_left_psi: number;
-  tpms_front_right_psi: number;
-  tpms_rear_left_psi: number;
-  tpms_rear_right_psi: number;
-  doors_locked: boolean;
-  engine_status: string;
-}
+
 
 // Stage 2: Sales Mobile App & Test Ride Insights
 export interface TestRideLeadItem {

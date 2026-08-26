@@ -48,7 +48,6 @@ class CustomerService:
                 selectinload(Customer.interactions),
                 selectinload(Customer.bookings),
                 selectinload(Customer.claims),
-                selectinload(Customer.telematics_alerts)
             )
         )
         result = await db.execute(stmt)
@@ -97,7 +96,6 @@ class CustomerService:
                 selectinload(Customer.interactions),
                 selectinload(Customer.bookings),
                 selectinload(Customer.claims),
-                selectinload(Customer.telematics_alerts)
             )
         )
         result = await db.execute(stmt)
@@ -289,7 +287,6 @@ class CustomerService:
                 selectinload(Customer.interactions),
                 selectinload(Customer.bookings),
                 selectinload(Customer.claims),
-                selectinload(Customer.telematics_alerts)
             )
         )
         result = await db.execute(stmt)
@@ -306,7 +303,6 @@ class CustomerService:
                 selectinload(Customer.interactions),
                 selectinload(Customer.bookings),
                 selectinload(Customer.claims),
-                selectinload(Customer.telematics_alerts)
             )
         )
         result = await db.execute(stmt)

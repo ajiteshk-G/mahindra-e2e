@@ -31,8 +31,4 @@ from app.schemas.diagnostics import (
     ClaimSubmissionRequest,
     ClaimSubmissionResponse
 )
-from app.schemas.telematics import (
-    TelematicsSnapshot,
-    TelematicsAlertSchema,
-    ServiceBookingFromTelematicsRequest
-)
+

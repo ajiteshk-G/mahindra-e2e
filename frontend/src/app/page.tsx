@@ -6,18 +6,16 @@ import { PreSalesShowroom } from "@/components/PreSalesShowroom";
 import { SalesMobileApp } from "@/components/SalesMobileApp";
 import { OutboundCallSimulator } from "@/components/OutboundCallSimulator";
 import { FinancingDocUpload } from "@/components/FinancingDocUpload";
-import { TelematicsWidget } from "@/components/TelematicsWidget";
 import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
 import { CustomerLeadModal } from "@/components/CustomerLeadModal";
 import { ChatAvatarPanel } from "@/components/ChatAvatarPanel";
 import { useCustomerProfile } from "@/hooks/useCustomerProfile";
 import { useLiveVoice } from "@/hooks/useLiveVoice";
-import { fetchCatalog, fetchDealerships, fetchLiveTelematics } from "@/lib/api";
+import { fetchCatalog, fetchDealerships } from "@/lib/api";
 import { DEFAULT_VEHICLES } from "@/lib/defaultCatalog";
 import {
   VehicleItem,
   DealershipItem,
-  TelematicsData,
   TestRideInsightResponse
 } from "@/types";
 import { Zap } from "lucide-react";
@@ -26,11 +24,10 @@ export default function Home() {
   const { profile, setProfile, loadProfile, setPhase } = useCustomerProfile();
   const [vehicles, setVehicles] = useState<VehicleItem[]>(DEFAULT_VEHICLES);
   const [dealerships, setDealerships] = useState<DealershipItem[]>([]);
-  const [telematics, setTelematics] = useState<TelematicsData | null>(null);
 
   // Active Omnichannel Stage
   const [activeStage, setActiveStage] = useState<
-    "presales" | "sales_app" | "outbound_call" | "financing" | "connected"
+    "presales" | "sales_app" | "outbound_call" | "financing"
   >("presales");
 
   // Selected vehicle & insights state
@@ -93,16 +90,14 @@ export default function Home() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [cat, dealers, tele] = await Promise.all([
+        const [cat, dealers] = await Promise.all([
           fetchCatalog(),
-          fetchDealerships(),
-          fetchLiveTelematics()
+          fetchDealerships()
         ]);
         if (Array.isArray(cat) && cat.length > 0) {
           setVehicles(cat);
         }
         setDealerships(dealers);
-        setTelematics(tele);
       } catch (e) {
         console.error("Data load error:", e);
       }
@@ -207,38 +202,10 @@ export default function Home() {
             onRefreshProfile={() => {
               if (profile?.phone) loadProfile(profile.phone);
             }}
-            onProceedToDelivery={() => setActiveStage("connected")}
           />
         )}
 
-        {/* Stage 5: Connected Vehicle Telematics & After-Sales */}
-        {activeStage === "connected" && (
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-red-700 border border-red-200 text-xs font-bold uppercase tracking-wider mb-2">
-                  <Zap className="w-3.5 h-3.5" />
-                  Stage 5: Connected Vehicle IoT & After-Sales Claims
-                </div>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-                  Welcome to Your Driver Cockpit
-                </h2>
-                <p className="text-xs text-slate-600 mt-1 max-w-2xl">
-                  Real-time IoT telemetry simulation (SoC, oil viscosity, TPMS) and Gemini Vision AI exterior vehicle damage inspection with instant zero-dep ICICI Lombard claims.
-                </p>
-              </div>
-            </div>
 
-            <TelematicsWidget
-              telematics={telematics}
-              profile={profile}
-              onOpenDiagnostics={() => {}}
-              onRefresh={() => {
-                if (profile?.phone) loadProfile(profile.phone);
-              }}
-            />
-          </div>
-        )}
       </main>
 
       {/* Global Floating Chat & Avatar Panel (No backdrop blur - main window remains fully visible & interactive) */}

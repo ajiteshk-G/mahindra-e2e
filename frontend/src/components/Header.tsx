@@ -16,8 +16,8 @@ import {
 
 interface HeaderProps {
   profile: CustomerProfile | null;
-  activeStage: "presales" | "sales_app" | "outbound_call" | "financing" | "connected";
-  onSelectStage: (stage: "presales" | "sales_app" | "outbound_call" | "financing" | "connected") => void;
+  activeStage: "presales" | "sales_app" | "outbound_call" | "financing";
+  onSelectStage: (stage: "presales" | "sales_app" | "outbound_call" | "financing") => void;
   onOpenProfile: () => void;
   onOpenLeadModal?: () => void;
   onOpenAvatar?: () => void;
@@ -35,8 +35,7 @@ export function Header({
     { id: "presales" as const, label: "1. Pre-Sales Showroom", icon: Sparkles },
     { id: "sales_app" as const, label: "2. Sales Mobile App", icon: Smartphone },
     { id: "outbound_call" as const, label: "3. Outbound Call", icon: PhoneCall },
-    { id: "financing" as const, label: "4. Loan & KYC", icon: CreditCard },
-    { id: "connected" as const, label: "5. Connected SUV", icon: Zap }
+    { id: "financing" as const, label: "4. Loan & KYC", icon: CreditCard }
   ];
 
   return (
@@ -88,29 +87,7 @@ export function Header({
             <span className="hidden sm:inline">Admin Portal</span>
           </Link>
 
-          {/* Talk to Kabir Primary CTA */}
-          {onOpenAvatar && (
-            <button
-              onClick={onOpenAvatar}
-              className="bg-red-600 hover:bg-red-700 text-white pl-1.5 pr-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 shadow-xs transition-all hover:scale-102 cursor-pointer group"
-              title="Talk to Kabir AI Specialist (Gemini Live)"
-            >
-              <div className="relative w-6 h-6 rounded-full overflow-hidden border border-white/40 bg-slate-800 shrink-0">
-                <img
-                  src="/avatars/jay.png"
-                  alt="Kabir Avatar"
-                  className="w-full h-full object-cover object-[50%_15%]"
-                />
-                <span className="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              </div>
-              <span className="flex items-center gap-1.5">
-                <span>Talk to Kabir</span>
-                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-black/40 text-red-200 font-mono uppercase font-bold">
-                  Live
-                </span>
-              </span>
-            </button>
-          )}
+
 
           {/* Customer Profile Pill (Only shown when identified) */}
           {profile && (

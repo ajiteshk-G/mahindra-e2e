@@ -36,7 +36,6 @@ interface FinancingDocUploadProps {
   profile: CustomerProfile | null;
   selectedVehicleId?: string;
   onRefreshProfile?: () => void;
-  onProceedToDelivery?: () => void;
 }
 
 export function FinancingDocUpload({
@@ -44,7 +43,6 @@ export function FinancingDocUpload({
   profile,
   selectedVehicleId = "thar_roxx",
   onRefreshProfile,
-  onProceedToDelivery
 }: FinancingDocUploadProps) {
   const [activeStep, setActiveStep] = useState<"calculator" | "documents" | "consent" | "sanction">("calculator");
   const [vehicleId, setVehicleId] = useState<string>(selectedVehicleId);
@@ -186,14 +184,11 @@ export function FinancingDocUpload({
           </p>
         </div>
 
-        {sanctionLetter && onProceedToDelivery && (
-          <button
-            onClick={onProceedToDelivery}
-            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs md:text-sm font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-red-900/40 flex items-center gap-2"
-          >
-            <span>Proceed to Connected Telematics</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+        {sanctionLetter && (
+          <div className="bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs md:text-sm font-bold px-4 py-2.5 rounded-xl flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>Digital Buying Journey Complete • Vehicle Allocated</span>
+          </div>
         )}
       </div>
 

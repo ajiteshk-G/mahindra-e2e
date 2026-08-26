@@ -226,33 +226,4 @@ export async function fileInsuranceClaim(payload: any) {
   return res.json();
 }
 
-// Telematics
-export async function fetchLiveTelematics(vin = "MAH1THARROXX2026MUM01") {
-  try {
-    const res = await fetch(`${API_BASE}/telematics/live?vin=${vin}`);
-    return await res.json();
-  } catch (err) {
-    return {
-      vin,
-      vehicle_name: "Mahindra Thar ROXX AX7L Diesel AT",
-      odometer_km: 9820,
-      service_due_km: 10000,
-      oil_viscosity_pct: 14.0,
-      battery_soc_pct: 84.0,
-      distance_to_empty_km: 465,
-      tpms_front_left_psi: 32.5,
-      tpms_front_right_psi: 32.5,
-      tpms_rear_left_psi: 32.5,
-      tpms_rear_right_psi: 32.5,
-      doors_locked: true,
-      engine_status: "STANDBY"
-    };
-  }
-}
 
-export async function triggerTelematicsAlert(customerId = "CUST-9820155432") {
-  const res = await fetch(`${API_BASE}/telematics/trigger-alert?customer_id=${customerId}`, {
-    method: "POST"
-  });
-  return res.json();
-}

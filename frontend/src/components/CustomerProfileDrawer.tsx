@@ -101,7 +101,7 @@ export function CustomerProfileDrawer({
                     : "bg-mahindra-dark border-mahindra-border text-gray-400"
                 }`}
               >
-                3. Post-Sales Connected Telematics & Claims
+                3. Completed Vehicle Delivery
               </button>
             </div>
           </div>
@@ -136,7 +136,7 @@ export function CustomerProfileDrawer({
           <div className="bg-mahindra-dark p-4 rounded-xl border border-mahindra-border space-y-2.5">
             <div className="font-bold text-white flex items-center gap-1.5">
               <Car className="w-4 h-4 text-mahindra-red" />
-              Vehicle Ownership & Telematics
+              Allocated Vehicle Details
             </div>
             <div className="text-gray-300 space-y-1">
               <div>{profile.owned_vehicle_name}</div>

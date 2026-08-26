@@ -52,7 +52,6 @@ class Customer(Base):
     interactions = relationship("InteractionLog", back_populates="customer", cascade="all, delete-orphan", order_by="desc(InteractionLog.created_at)")
     bookings = relationship("TestDriveBooking", back_populates="customer", cascade="all, delete-orphan")
     claims = relationship("InsuranceClaim", back_populates="customer", cascade="all, delete-orphan")
-    telematics_alerts = relationship("TelematicsAlert", back_populates="customer", cascade="all, delete-orphan")
     test_ride_recordings = relationship("TestRideRecording", back_populates="customer", cascade="all, delete-orphan")
     outbound_calls = relationship("OutboundCallLog", back_populates="customer", cascade="all, delete-orphan")
     financing_applications = relationship("FinancingApplication", back_populates="customer", cascade="all, delete-orphan")
