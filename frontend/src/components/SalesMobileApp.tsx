@@ -30,7 +30,7 @@ import {
   ChevronRight,
   Filter
 } from "lucide-react";
-import { fetchSalesLeads, uploadTestRideRecording, fetchDealerships } from "@/lib/api";
+import { fetchSalesLeads, uploadTestRideRecording, fetchDealerships, fetchLatestTestRideInsights } from "@/lib/api";
 
 interface SalesMobileAppProps {
   vehicles: VehicleItem[];
@@ -122,14 +122,69 @@ export function SalesMobileApp({
     loadLeadsForShowroom(selectedShowroom);
   }, [selectedShowroom]);
 
+  // Auto-fetch persisted test ride insights whenever selectedLead changes
+  useEffect(() => {
+    async function loadPersistedInsights() {
+      if (!selectedLead && !profile) {
+        setInsights(null);
+        setRecordingSeconds(0);
+        return;
+      }
+      try {
+        const persisted = await fetchLatestTestRideInsights({
+          customer_id: selectedLead?.customer_id || profile?.customer_id,
+          booking_reference: selectedLead?.booking_reference,
+          phone: selectedLead?.phone || profile?.phone
+        });
+        if (persisted && persisted.session_id) {
+          setInsights(persisted);
+          setRecordingSeconds(persisted.duration_seconds || 184);
+        } else {
+          setInsights(null);
+          setRecordingSeconds(0);
+        }
+      } catch (e) {
+        console.debug("No existing test ride insights found for lead:", e);
+        setInsights(null);
+        setRecordingSeconds(0);
+      }
+    }
+    loadPersistedInsights();
+  }, [selectedLead, profile]);
+
   // Handle lead selection - dynamic vehicle extraction from booking
-  const handleSelectLead = (lead: TestRideLeadItem) => {
+  const handleSelectLead = async (lead: TestRideLeadItem) => {
     setSelectedLead(lead);
     setCheckedChecklist({});
+    setInsights(null);
+    setRecordingSeconds(0);
+    setIsRecording(false);
+    setIsPaused(false);
+    setAudioUrl(null);
+
     const vId = lead.vehicle_id || "thar_roxx";
     setTestVehicleId(vId);
     setSelectedVariant(lead.variant || "AX7L Diesel AT 4x4");
     setActiveTab("record");
+
+    // Immediately check if this specific lead has persisted insights
+    try {
+      const persisted = await fetchLatestTestRideInsights({
+        customer_id: lead.customer_id,
+        booking_reference: lead.booking_reference,
+        phone: lead.phone
+      });
+      if (persisted && persisted.session_id) {
+        setInsights(persisted);
+        setRecordingSeconds(persisted.duration_seconds || 184);
+      } else {
+        setInsights(null);
+        setRecordingSeconds(0);
+      }
+    } catch (e) {
+      setInsights(null);
+      setRecordingSeconds(0);
+    }
   };
 
   // Recording Timer
@@ -229,6 +284,13 @@ export function SalesMobileApp({
 
       setInsights(response);
       setActiveTab("insights");
+      if (selectedLead) {
+        setSelectedLead({
+          ...selectedLead,
+          booking_status: "TestRide_Completed"
+        });
+      }
+      loadLeadsForShowroom(selectedShowroom);
     } catch (err) {
       console.error("Error uploading test ride:", err);
     } finally {
@@ -256,6 +318,13 @@ export function SalesMobileApp({
 
       setInsights(response);
       setActiveTab("insights");
+      if (selectedLead) {
+        setSelectedLead({
+          ...selectedLead,
+          booking_status: "TestRide_Completed"
+        });
+      }
+      loadLeadsForShowroom(selectedShowroom);
     } catch (err) {
       console.error("Error simulating test ride recording:", err);
     } finally {
@@ -446,7 +515,7 @@ export function SalesMobileApp({
                             >
                               <div className="flex items-center justify-between">
                                 <span className="font-bold text-slate-900 text-xs">{lead.name}</span>
-                                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold">
+                                <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${lead.booking_status === "TestRide_Completed" ? "bg-purple-100 text-purple-900 border border-purple-300" : "bg-emerald-100 text-emerald-800 border border-emerald-300"}`}>
                                   {lead.booking_status}
                                 </span>
                               </div>
@@ -604,7 +673,7 @@ export function SalesMobileApp({
                     {/* Audio Waveform & Timer Recorder Shell (Light Theme) */}
                     <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs text-center space-y-3">
                       <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                        {isRecording ? "🔴 RECORDING IN PROGRESS" : "TEST RIDE AUDIO CAPTURE"}
+                        {isRecording ? "🔴 RECORDING IN PROGRESS" : (insights ? "TEST RIDE AUDIO CAPTURED" : "READY TO CAPTURE TEST RIDE AUDIO")}
                       </div>
 
                       {/* Timer Display */}

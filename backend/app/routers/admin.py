@@ -202,7 +202,7 @@ async def get_admin_bookings(
             "delivery_address": b.delivery_address or "Customer Residence",
             "scheduled_date": b.scheduled_date,
             "scheduled_time_slot": b.scheduled_time_slot,
-            "status": b.status or "CONFIRMED",
+            "status": "TestRide_Completed" if (b.status == "TestRide_Completed" or len(test_ride_sessions) > 0) else (b.status or "CONFIRMED"),
             "sms_status": "SENT",
             "created_at": b.created_at.strftime("%Y-%m-%d %H:%M:%S") if b.created_at else "",
             # Dual Transcripts

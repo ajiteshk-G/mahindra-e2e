@@ -136,6 +136,22 @@ export async function fetchTestRideInsights(sessionId: string) {
   return res.json();
 }
 
+export async function fetchLatestTestRideInsights(params?: { customer_id?: string; booking_reference?: string; phone?: string }) {
+  try {
+    const q = new URLSearchParams();
+    if (params?.customer_id) q.set("customer_id", params.customer_id);
+    if (params?.booking_reference) q.set("booking_reference", params.booking_reference);
+    if (params?.phone) q.set("phone", params.phone);
+    const res = await fetch(`${API_BASE}/sales/test-ride/latest?${q.toString()}`);
+    if (res.ok) {
+      return await res.json();
+    }
+    return null;
+  } catch (err) {
+    return null;
+  }
+}
+
 export async function fetchAllTestRides() {
   const res = await fetch(`${API_BASE}/sales/test-ride/all`);
   return res.json();

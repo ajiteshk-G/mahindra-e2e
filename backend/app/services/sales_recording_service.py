@@ -98,6 +98,17 @@ class SalesRecordingService:
             is_custom = bool(db_checklist and len(db_checklist) > 0)
             final_checklist = db_checklist if is_custom else CatalogService.get_static_checklist(b.vehicle_id)
 
+            # Check if this booking has an existing test ride recording
+            tr_rec_stmt = select(TestRideRecording).where(
+                (TestRideRecording.booking_reference == b.booking_reference) |
+                (TestRideRecording.booking_id == b.id) |
+                (TestRideRecording.customer_id == b.customer_id)
+            )
+            tr_res = await db.execute(tr_rec_stmt)
+            has_tr_rec = tr_res.scalars().first() is not None
+
+            resolved_status = "TestRide_Completed" if (b.status == "TestRide_Completed" or has_tr_rec) else (b.status or "CONFIRMED")
+
             leads.append(TestRideLeadItem(
                 customer_id=cust_id_str,
                 name=cust_name,
@@ -112,7 +123,7 @@ class SalesRecordingService:
                 dealership_name=b.dealership_name,
                 booking_type=b.booking_type or "HOME_DOORSTEP",
                 delivery_address=b.delivery_address,
-                booking_status=b.status or "CONFIRMED",
+                booking_status=resolved_status,
                 scheduled_slot=f"{b.scheduled_date} at {b.scheduled_time_slot}",
                 presales_notes=f"Test drive booked for {veh_name} ({b.variant}) at {b.dealership_name}. Booking Ref: {b.booking_reference}.",
                 advisor_checklist=final_checklist,
@@ -133,6 +144,12 @@ class SalesRecordingService:
                     is_custom = bool(db_checklist and len(db_checklist) > 0)
                     final_checklist = db_checklist if is_custom else CatalogService.get_static_checklist(c.interested_vehicle_id or "thar_roxx")
 
+                    tr_rec_stmt = select(TestRideRecording).where(TestRideRecording.customer_id == c.id)
+                    tr_res = await db.execute(tr_rec_stmt)
+                    has_tr_rec = tr_res.scalars().first() is not None
+
+                    resolved_status = "TestRide_Completed" if (c.current_phase == "TestRide_Completed" or has_tr_rec) else "INQUIRY_READY_FOR_RIDE"
+
                     leads.append(TestRideLeadItem(
                         customer_id=c.customer_id,
                         name=c.name,
@@ -144,7 +161,7 @@ class SalesRecordingService:
                         variant=c.interested_variant or "AX7L Diesel AT 4x4",
                         dealership_name="Mahindra Bayview Motors - Bandra West",
                         dealership_id="bayview_bandra",
-                        booking_status="INQUIRY_READY_FOR_RIDE",
+                        booking_status=resolved_status,
                         scheduled_slot="Tomorrow at 11:00 AM",
                         presales_notes=f"Explored {veh_name} in Virtual Showroom. Inquired about pricing and performance.",
                         advisor_checklist=final_checklist,
@@ -389,13 +406,66 @@ Return valid JSON with keys: customer_sentiment_score, purchase_intent_score, ad
                 db.add(log)
 
         # Advance customer phase
-        customer.current_phase = "TEST_RIDE_COMPLETED"
+        customer.current_phase = "TestRide_Completed"
         if booking:
-            booking.status = "CONFIRMED"
+            booking.status = "TestRide_Completed"
 
         await db.commit()
         await db.refresh(recording)
         return recording
+
+    @staticmethod
+    async def get_latest_test_ride(
+        db: AsyncSession,
+        customer_id: Optional[str] = None,
+        booking_reference: Optional[str] = None,
+        phone: Optional[str] = None
+    ) -> Optional[TestRideRecording]:
+        """
+        Retrieves the latest persisted TestRideRecording insights for a customer,
+        matching by booking_reference, customer_id, or customer phone.
+        """
+        if booking_reference and booking_reference.strip():
+            b_stmt = select(TestRideRecording).where(
+                TestRideRecording.booking_reference == booking_reference.strip()
+            ).order_by(TestRideRecording.created_at.desc())
+            res = await db.execute(b_stmt)
+            rec = res.scalars().first()
+            if rec:
+                return rec
+
+        if customer_id and customer_id.strip():
+            c_stmt = select(Customer).where(
+                (Customer.customer_id == customer_id.strip()) |
+                (Customer.phone == customer_id.strip())
+            )
+            c_res = await db.execute(c_stmt)
+            cust = c_res.scalars().first()
+            if cust:
+                rec_stmt = select(TestRideRecording).where(
+                    TestRideRecording.customer_id == cust.id
+                ).order_by(TestRideRecording.created_at.desc())
+                rec_res = await db.execute(rec_stmt)
+                rec = rec_res.scalars().first()
+                if rec:
+                    return rec
+
+        if phone and phone.strip():
+            clean_p = clean_phone(phone)
+            c_stmt = select(Customer).where(Customer.phone.ilike(f"%{clean_p[-10:] if len(clean_p) >= 10 else clean_p}%"))
+            c_res = await db.execute(c_stmt)
+            cust = c_res.scalars().first()
+            if cust:
+                rec_stmt = select(TestRideRecording).where(
+                    TestRideRecording.customer_id == cust.id
+                ).order_by(TestRideRecording.created_at.desc())
+                rec_res = await db.execute(rec_stmt)
+                rec = rec_res.scalars().first()
+                if rec:
+                    return rec
+
+        # Strictly return None if no test ride recording exists for this specific customer/booking
+        return None
 
     @staticmethod
     async def get_test_ride_insights(db: AsyncSession, session_id: str) -> Optional[TestRideRecording]:

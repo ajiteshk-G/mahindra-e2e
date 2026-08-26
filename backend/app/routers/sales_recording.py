@@ -28,6 +28,22 @@ async def upload_test_ride_recording(
     recording = await SalesRecordingService.process_and_store_recording(db, req)
     return recording
 
+@router.get("/test-ride/latest", response_model=Optional[TestRideInsightResponse])
+async def get_latest_test_ride(
+    customer_id: Optional[str] = None,
+    booking_reference: Optional[str] = None,
+    phone: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Retrieve the latest persisted AI insights for a customer or booking reference."""
+    insights = await SalesRecordingService.get_latest_test_ride(
+        db,
+        customer_id=customer_id,
+        booking_reference=booking_reference,
+        phone=phone
+    )
+    return insights
+
 @router.get("/test-ride/insights/{session_id}", response_model=TestRideInsightResponse)
 async def get_test_ride_insights(
     session_id: str,

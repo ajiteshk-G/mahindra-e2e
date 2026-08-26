@@ -486,7 +486,8 @@ export function AdminBookingsTable() {
 
                       {/* Column 7: Status & SMS */}
                       <td className="py-4 px-4 align-top text-center space-y-1.5">
-                        <div className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10.5px] font-black tracking-wide">
+                        <div className={`inline-block px-2.5 py-0.5 rounded-full text-[10.5px] font-black tracking-wide ${booking.status === "TestRide_Completed" ? "bg-purple-100 border border-purple-300 text-purple-900" : "bg-emerald-50 border border-emerald-200 text-emerald-800"}`}>
+
                           {booking.status}
                         </div>
                         <div className="flex items-center justify-center gap-1 text-[10px] text-emerald-700 font-semibold">
