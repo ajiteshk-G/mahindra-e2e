@@ -15,9 +15,10 @@ RUN pip install --no-cache-dir -r ./backend/requirements.txt
 # Copy Backend application
 COPY backend ./backend
 
-# Copy Frontend (with pre-compiled production build) and install dependencies
-COPY frontend ./frontend
-RUN cd ./frontend && npm install --legacy-peer-deps
+# Copy Frontend Standalone Bundle + Static files
+COPY frontend/.next/standalone ./frontend
+COPY frontend/.next/static ./frontend/.next/static
+COPY frontend/public ./frontend/public
 
 # Copy entrypoint runner
 COPY entrypoint.sh ./
@@ -27,6 +28,7 @@ ENV PROJECT_ID="mb-poc-352009"
 ENV LOCATION="us-central1"
 ENV PORT=8080
 ENV ENABLE_SMS_DISPATCH="true"
+ENV NODE_ENV=production
 
 EXPOSE 8080
 

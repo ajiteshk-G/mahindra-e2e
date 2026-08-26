@@ -19,15 +19,18 @@ from app.routers import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize DB schemas on startup
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        
-    # Seed default customer and dealerships & pre-warm cache
-    async with AsyncSessionLocal() as db:
-        try:
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            
+        # Seed default customer and dealerships & pre-warm cache
+        async with AsyncSessionLocal() as db:
             await CustomerService.get_or_create_default_customer(db)
-            from seeds.seed_dealerships import seed_dealerships
-            await seed_dealerships()
+            try:
+                from seeds.seed_dealerships import seed_dealerships
+                await seed_dealerships()
+            except Exception as se:
+                print(f"Dealership seed info: {se}")
             
             # Prewarm cache for instantaneous response
             from sqlalchemy.future import select
