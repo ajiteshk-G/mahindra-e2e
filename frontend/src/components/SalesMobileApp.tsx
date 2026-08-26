@@ -126,7 +126,6 @@ export function SalesMobileApp({
   const handleSelectLead = (lead: TestRideLeadItem) => {
     setSelectedLead(lead);
     setCheckedChecklist({});
-    // Dynamic vehicle id directly from booking API
     const vId = lead.vehicle_id || "thar_roxx";
     setTestVehicleId(vId);
     setSelectedVariant(lead.variant || "AX7L Diesel AT 4x4");
@@ -279,29 +278,29 @@ export function SalesMobileApp({
 
   return (
     <div className="space-y-6">
-      {/* Stage Header Banner with Showroom Selector */}
-      <div className="bg-gradient-to-r from-neutral-900 via-stone-900 to-amber-950/80 p-5 rounded-2xl border border-amber-900/30 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shadow-xl">
+      {/* Stage Header Banner with Showroom Selector (Light Theme) */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div className="space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold uppercase tracking-wider">
-            <Smartphone className="w-3.5 h-3.5" />
-            Stage 2: Sales Advisor Mobile Companion &amp; Test Ride Recording
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-700 border border-red-200 text-xs font-bold uppercase tracking-wider">
+            <Smartphone className="w-3.5 h-3.5 text-red-600" />
+            Stage 2: Sales Advisor Companion &amp; Test Ride Recording
           </div>
-          <h2 className="text-xl md:text-2xl font-black text-white tracking-wide flex items-center gap-2">
-            <span>Advisor Field App &amp; GCS Audio Insights Engine</span>
+          <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <span>Advisor Field Companion &amp; GCS Audio Insights Engine</span>
           </h2>
-          <p className="text-xs md:text-sm text-neutral-300 max-w-2xl">
-            Select a showroom to load verified customer test drive bookings. The advisor companion automatically pulls the customer&apos;s booked vehicle from the database and captures live audio insights.
+          <p className="text-xs md:text-sm text-slate-600 max-w-2xl leading-relaxed">
+            Select a showroom to load verified customer test drive bookings. The advisor companion automatically pulls the customer&apos;s booked vehicle from the database and captures in-vehicle audio with AI speaker diarization.
           </p>
 
           {/* Showroom Selector Dropdown in Banner */}
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <div className="flex items-center gap-1.5 text-xs text-amber-300 font-bold bg-black/50 px-3 py-1.5 rounded-xl border border-white/10">
-              <Building2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <div className="flex items-center gap-1.5 text-xs text-slate-700 font-bold bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 shadow-xs">
+              <Building2 className="w-3.5 h-3.5 text-red-600 shrink-0" />
               <span>Select Showroom:</span>
               <select
                 value={selectedShowroom}
                 onChange={(e) => setSelectedShowroom(e.target.value)}
-                className="bg-neutral-900 text-white font-bold border border-white/20 rounded-lg px-2.5 py-1 text-xs outline-none focus:border-amber-400 cursor-pointer"
+                className="bg-white text-slate-900 font-bold border border-slate-300 rounded-lg px-2.5 py-1 text-xs outline-none focus:border-red-500 cursor-pointer shadow-2xs"
               >
                 <option value="ALL">🏢 All Showrooms ({dealerships.length} Dealerships)</option>
                 {dealerships.map((dealer) => (
@@ -312,7 +311,7 @@ export function SalesMobileApp({
               </select>
             </div>
 
-            <span className="text-[11px] font-mono text-slate-400 bg-white/5 px-2.5 py-1 rounded-lg border border-white/10">
+            <span className="text-[11px] font-mono font-bold text-slate-700 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
               {leads.length} Booked Lead{leads.length !== 1 ? "s" : ""} Available
             </span>
           </div>
@@ -321,7 +320,7 @@ export function SalesMobileApp({
         {insights && (
           <button
             onClick={() => onProceedToOutboundCall(insights)}
-            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs md:text-sm font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-red-900/40 flex items-center gap-2 shrink-0 cursor-pointer"
+            className="bg-red-600 hover:bg-red-700 text-white text-xs md:text-sm font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-2 shrink-0 cursor-pointer hover:scale-102"
           >
             <span>Proceed to Stage 3: Outbound Call</span>
             <ArrowRight className="w-4 h-4" />
@@ -333,58 +332,58 @@ export function SalesMobileApp({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left 5 Cols: Realistic Mobile Device View */}
         <div className="lg:col-span-5 flex justify-center">
-          <div className="w-full max-w-sm bg-black rounded-[42px] p-3 shadow-[0_0_50px_rgba(0,0,0,0.8)] border-[6px] border-neutral-800 relative">
+          <div className="w-full max-w-sm bg-slate-900 rounded-[42px] p-3 shadow-2xl border-[6px] border-slate-700 relative">
             {/* Phone Notch / Dynamic Island */}
-            <div className="w-28 h-5 bg-neutral-900 rounded-full mx-auto mb-2 flex items-center justify-center gap-1.5">
+            <div className="w-28 h-5 bg-black rounded-full mx-auto mb-2 flex items-center justify-center gap-1.5 shadow-inner">
               <span className="w-2 h-2 rounded-full bg-neutral-800"></span>
-              <span className="w-2 h-2 rounded-full bg-blue-900/60"></span>
+              <span className="w-2 h-2 rounded-full bg-blue-900/80"></span>
             </div>
 
-            {/* Mobile Screen Shell */}
-            <div className="bg-neutral-950 rounded-[32px] overflow-hidden border border-neutral-800 flex flex-col h-[620px] text-xs">
+            {/* Mobile Screen Shell (Crisp Light Theme Interior) */}
+            <div className="bg-slate-50 rounded-[32px] overflow-hidden border border-slate-200 flex flex-col h-[640px] text-xs shadow-inner">
               {/* App Top Bar */}
-              <div className="bg-gradient-to-r from-red-950 via-neutral-900 to-black px-4 py-3 border-b border-neutral-800 flex items-center justify-between">
+              <div className="bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between shadow-2xs">
                 <div>
-                  <span className="text-[9.5px] text-red-300 font-bold uppercase tracking-wider block">
-                    Mahindra Advisor Field App
+                  <span className="text-[9.5px] text-red-600 font-bold uppercase tracking-wider block">
+                    Mahindra Field Companion
                   </span>
-                  <span className="font-black text-white text-xs truncate max-w-[190px] block">
+                  <span className="font-black text-slate-900 text-xs truncate max-w-[190px] block">
                     {activeShowroomName}
                   </span>
                 </div>
-                <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold">
                   Online
                 </span>
               </div>
 
-              {/* Mobile Tabs */}
-              <div className="flex border-b border-neutral-800 bg-neutral-900/60 text-[11px]">
+              {/* Mobile Tabs (Light Theme) */}
+              <div className="flex border-b border-slate-200 bg-slate-100 text-[11px]">
                 <button
                   onClick={() => setActiveTab("leads")}
-                  className={`flex-1 py-2.5 font-bold text-center transition-colors ${
+                  className={`flex-1 py-2.5 font-bold text-center transition-all cursor-pointer ${
                     activeTab === "leads"
-                      ? "text-red-400 border-b-2 border-red-500 bg-red-950/20"
-                      : "text-neutral-400 hover:text-white"
+                      ? "text-red-700 border-b-2 border-red-600 bg-white shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
                   }`}
                 >
                   📋 Leads ({leads.length})
                 </button>
                 <button
                   onClick={() => setActiveTab("record")}
-                  className={`flex-1 py-2.5 font-bold text-center transition-colors ${
+                  className={`flex-1 py-2.5 font-bold text-center transition-all cursor-pointer ${
                     activeTab === "record"
-                      ? "text-red-400 border-b-2 border-red-500 bg-red-950/20"
-                      : "text-neutral-400 hover:text-white"
+                      ? "text-red-700 border-b-2 border-red-600 bg-white shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
                   }`}
                 >
                   🎙️ Test Ride
                 </button>
                 <button
                   onClick={() => setActiveTab("insights")}
-                  className={`flex-1 py-2.5 font-bold text-center transition-colors ${
+                  className={`flex-1 py-2.5 font-bold text-center transition-all cursor-pointer ${
                     activeTab === "insights"
-                      ? "text-red-400 border-b-2 border-red-500 bg-red-950/20"
-                      : "text-neutral-400 hover:text-white"
+                      ? "text-red-700 border-b-2 border-red-600 bg-white shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
                   }`}
                 >
                   ✨ Insights
@@ -392,22 +391,22 @@ export function SalesMobileApp({
               </div>
 
               {/* Mobile Tab Content */}
-              <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
+              <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
                 {/* TAB 1: Leads loaded for Selected Showroom */}
                 {activeTab === "leads" && (
                   <div className="space-y-3">
                     {/* Showroom filter inside mobile */}
-                    <div className="p-2.5 bg-neutral-900/90 rounded-xl border border-neutral-800 space-y-1.5">
-                      <div className="flex items-center justify-between text-[10px] text-neutral-400">
-                        <span className="font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
-                          <Building2 className="w-3 h-3" /> Showroom Filter
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                        <span className="font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                          <Building2 className="w-3 h-3 text-red-600" /> Showroom Filter
                         </span>
-                        <span>{leads.length} Booked</span>
+                        <span className="font-bold text-slate-700">{leads.length} Booked</span>
                       </div>
                       <select
                         value={selectedShowroom}
                         onChange={(e) => setSelectedShowroom(e.target.value)}
-                        className="w-full bg-black text-white font-bold border border-neutral-700 rounded-lg px-2 py-1 text-[11px] outline-none"
+                        className="w-full bg-slate-50 text-slate-900 font-bold border border-slate-300 rounded-lg px-2 py-1 text-[11px] outline-none cursor-pointer"
                       >
                         <option value="ALL">All Dealerships</option>
                         {dealerships.map((d) => (
@@ -419,15 +418,15 @@ export function SalesMobileApp({
                     </div>
 
                     {isLoadingLeads ? (
-                      <div className="py-8 text-center text-neutral-400 space-y-1.5">
-                        <RefreshCw className="w-5 h-5 animate-spin text-amber-400 mx-auto" />
+                      <div className="py-8 text-center text-slate-500 space-y-1.5">
+                        <RefreshCw className="w-5 h-5 animate-spin text-red-600 mx-auto" />
                         <p className="text-xs">Loading showroom leads...</p>
                       </div>
                     ) : leads.length === 0 ? (
-                      <div className="py-8 text-center text-neutral-400 p-4 bg-neutral-900/40 rounded-2xl border border-neutral-800 space-y-1">
-                        <AlertCircle className="w-6 h-6 text-amber-400 mx-auto" />
-                        <p className="font-bold text-white text-xs">No bookings for this showroom yet.</p>
-                        <p className="text-[10.5px] text-neutral-500">
+                      <div className="py-8 text-center text-slate-500 p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-1">
+                        <AlertCircle className="w-6 h-6 text-amber-500 mx-auto" />
+                        <p className="font-bold text-slate-900 text-xs">No bookings for this showroom yet.</p>
+                        <p className="text-[10.5px] text-slate-500">
                           Select &quot;All Dealerships&quot; or book a new test ride in Pre-Sales Showroom.
                         </p>
                       </div>
@@ -441,33 +440,33 @@ export function SalesMobileApp({
                               onClick={() => handleSelectLead(lead)}
                               className={`p-3 rounded-2xl border cursor-pointer transition-all ${
                                 isSelected
-                                  ? "bg-red-950/40 border-red-500 shadow-md shadow-red-950/40 ring-1 ring-red-500/50"
-                                  : "bg-neutral-900 border-neutral-800 hover:border-neutral-700"
+                                  ? "bg-red-50 border-red-500 shadow-sm ring-1 ring-red-500/40"
+                                  : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-xs"
                               }`}
                             >
                               <div className="flex items-center justify-between">
-                                <span className="font-bold text-white text-xs">{lead.name}</span>
-                                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+                                <span className="font-bold text-slate-900 text-xs">{lead.name}</span>
+                                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold">
                                   {lead.booking_status}
                                 </span>
                               </div>
 
-                              <p className="text-neutral-400 text-[10px] mt-1 flex items-center gap-1">
-                                <Phone className="w-2.5 h-2.5 text-red-400" />
+                              <p className="text-slate-500 text-[10px] mt-1 flex items-center gap-1">
+                                <Phone className="w-2.5 h-2.5 text-red-600" />
                                 <span>{lead.phone}</span>
                                 {lead.city && <span>• 📍 {lead.city}</span>}
                               </p>
 
                               {/* Booked Vehicle & Variant */}
-                              <div className="mt-2 p-1.5 bg-black/60 rounded-lg border border-white/5 space-y-0.5">
-                                <div className="text-amber-300 font-bold text-[10.5px] flex items-center gap-1">
-                                  <Car className="w-3 h-3 text-red-400 shrink-0" />
+                              <div className="mt-2 p-1.5 bg-slate-50 rounded-lg border border-slate-200 space-y-0.5">
+                                <div className="text-slate-900 font-bold text-[10.5px] flex items-center gap-1">
+                                  <Car className="w-3 h-3 text-red-600 shrink-0" />
                                   <span className="truncate">{lead.preferred_vehicle}</span>
                                 </div>
-                                <div className="flex items-center justify-between text-[9.5px] text-neutral-400">
+                                <div className="flex items-center justify-between text-[9.5px] text-slate-500">
                                   <span>{lead.scheduled_slot}</span>
                                   {lead.booking_reference && (
-                                    <span className="font-mono text-cyan-300 font-bold">
+                                    <span className="font-mono text-cyan-800 bg-cyan-50 px-1.5 py-0.2 rounded border border-cyan-200 font-bold">
                                       {lead.booking_reference}
                                     </span>
                                   )}
@@ -475,14 +474,14 @@ export function SalesMobileApp({
                               </div>
 
                               {lead.booking_type === "HOME_DOORSTEP" && lead.delivery_address && (
-                                <div className="mt-1 text-[9.5px] text-emerald-400 truncate">
+                                <div className="mt-1 text-[9.5px] text-emerald-700 truncate font-medium">
                                   🏠 Doorstep: {lead.delivery_address}
                                 </div>
                               )}
 
                               {lead.is_custom_checklist && (
-                                <div className="mt-1.5 flex items-center gap-1 text-[9px] text-amber-400 font-bold bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-500/20">
-                                  <Sparkles className="w-2.5 h-2.5 shrink-0" />
+                                <div className="mt-1.5 flex items-center gap-1 text-[9px] text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                                  <Sparkles className="w-2.5 h-2.5 text-amber-600 shrink-0" />
                                   <span className="truncate">AI Pre-Sales Checklist ({lead.advisor_checklist?.length || 0} asks)</span>
                                 </div>
                               )}
@@ -493,10 +492,10 @@ export function SalesMobileApp({
                     )}
 
                     {selectedLead && (
-                      <div className="pt-2">
+                      <div className="pt-1">
                         <button
                           onClick={() => setActiveTab("record")}
-                          className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-red-950/50 cursor-pointer"
+                          className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer transition-all hover:scale-102"
                         >
                           <Mic className="w-3.5 h-3.5" />
                           <span>Start Test Ride for {selectedLead.name}</span>
@@ -506,34 +505,34 @@ export function SalesMobileApp({
                   </div>
                 )}
 
-                {/* TAB 2: Mobile Audio Recording */}
+                {/* TAB 2: Mobile Audio Recording (Light Theme) */}
                 {activeTab === "record" && (
-                  <div className="space-y-3.5">
+                  <div className="space-y-3">
                     {/* Customer & Booked Vehicle Header */}
-                    <div className="p-3 bg-neutral-900 rounded-2xl border border-neutral-800 space-y-2">
+                    <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-[10px] text-neutral-400 uppercase font-bold">Customer</span>
-                        <span className="font-bold text-white">{selectedLead?.name || "Valued Customer"}</span>
+                        <span className="text-[10px] text-slate-500 uppercase font-bold">Customer</span>
+                        <span className="font-bold text-slate-900">{selectedLead?.name || "Valued Customer"}</span>
                       </div>
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-[10px] text-neutral-400 uppercase font-bold">Phone</span>
-                        <span className="font-mono text-slate-300 text-[11px]">{selectedLead?.phone || "—"}</span>
+                        <span className="text-[10px] text-slate-500 uppercase font-bold">Phone</span>
+                        <span className="font-mono text-slate-700 text-[11px]">{selectedLead?.phone || "—"}</span>
                       </div>
-                      <div className="pt-1.5 border-t border-neutral-800 flex items-center justify-between text-xs">
-                        <span className="text-[10px] text-neutral-400 uppercase font-bold">Test Ride Vehicle</span>
-                        <span className="font-black text-amber-400 text-[11px]">
+                      <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-xs">
+                        <span className="text-[10px] text-slate-500 uppercase font-bold">Test Ride Vehicle</span>
+                        <span className="font-black text-slate-900 text-[11px]">
                           {currentVehicleObj?.name}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-[10.5px]">
-                        <span className="text-[10px] text-neutral-400 uppercase font-bold">Booked Variant</span>
-                        <span className="px-2 py-0.5 rounded bg-red-950 text-red-300 border border-red-500/30 font-bold">
+                        <span className="text-[10px] text-slate-500 uppercase font-bold">Booked Variant</span>
+                        <span className="px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 font-bold">
                           {selectedVariant}
                         </span>
                       </div>
                     </div>
 
-                    {/* Advisor Demo Checklist picked up dynamically from Database or Static Fallback */}
+                    {/* Advisor Demo Checklist (Light Theme) */}
                     {(() => {
                       const activeChecklist = (selectedLead?.advisor_checklist && selectedLead.advisor_checklist.length > 0)
                         ? selectedLead.advisor_checklist
@@ -547,17 +546,17 @@ export function SalesMobileApp({
                       const isCustom = selectedLead?.is_custom_checklist ?? (selectedLead?.advisor_checklist && selectedLead.advisor_checklist.length > 0);
 
                       return (
-                        <div className="p-3 bg-neutral-900/80 rounded-2xl border border-neutral-800 text-[10.5px] space-y-2 text-neutral-300">
+                        <div className="p-3 bg-amber-50/60 rounded-2xl border border-amber-200 text-[10.5px] space-y-2 text-slate-800 shadow-2xs">
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-[10px] font-bold text-amber-400 uppercase flex items-center gap-1 truncate">
-                              <Sparkles className="w-3 h-3 text-amber-400 shrink-0" /> Demo Checklist ({currentVehicleObj?.name || "Mahindra SUV"}):
+                            <span className="text-[10px] font-bold text-amber-900 uppercase flex items-center gap-1 truncate">
+                              <Sparkles className="w-3 h-3 text-amber-600 shrink-0" /> Demo Checklist ({currentVehicleObj?.name || "Mahindra SUV"}):
                             </span>
                             {isCustom ? (
-                              <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 shrink-0 flex items-center gap-1 shadow-sm">
-                                <Sparkles className="w-2.5 h-2.5 text-amber-400" /> AI-Tailored (Database)
+                              <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 shrink-0 flex items-center gap-1 shadow-2xs">
+                                <Sparkles className="w-2.5 h-2.5 text-amber-700" /> AI-Tailored (DB)
                               </span>
                             ) : (
-                              <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 shrink-0">
+                              <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
                                 Static Vehicle Demo
                               </span>
                             )}
@@ -570,19 +569,19 @@ export function SalesMobileApp({
                                 <div
                                   key={idx}
                                   onClick={() => toggleChecklistItem(item)}
-                                  className={`flex items-start gap-2 p-1.5 rounded-lg cursor-pointer transition-all ${
+                                  className={`flex items-start gap-2 p-2 rounded-lg cursor-pointer transition-all ${
                                     isChecked
-                                      ? "bg-emerald-950/40 text-emerald-300 border border-emerald-500/30"
-                                      : "bg-black/40 hover:bg-neutral-800/60 text-neutral-200 border border-white/5"
+                                      ? "bg-emerald-100/70 text-emerald-900 border border-emerald-300 line-through"
+                                      : "bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 shadow-2xs"
                                   }`}
                                 >
                                   <input
                                     type="checkbox"
                                     checked={isChecked}
                                     onChange={() => {}}
-                                    className="mt-0.5 accent-emerald-500 rounded cursor-pointer shrink-0"
+                                    className="mt-0.5 accent-emerald-600 rounded cursor-pointer shrink-0"
                                   />
-                                  <span className={`text-[10.5px] leading-snug ${isChecked ? "line-through text-emerald-400/70" : "text-neutral-200"}`}>
+                                  <span className={`text-[10.5px] leading-snug ${isChecked ? "text-emerald-800/80" : "text-slate-800"}`}>
                                     {item}
                                   </span>
                                 </div>
@@ -590,11 +589,11 @@ export function SalesMobileApp({
                             })}
                           </div>
                           
-                          <div className="text-[9px] text-neutral-500 flex items-center justify-between pt-0.5 border-t border-white/5">
-                            <span>
+                          <div className="text-[9px] text-slate-500 flex items-center justify-between pt-0.5 border-t border-amber-200/60">
+                            <span className="font-medium text-slate-700">
                               {Object.values(checkedChecklist).filter(Boolean).length}/{activeChecklist.length} Items Demonstrated
                             </span>
-                            <span className="text-[8.5px] text-neutral-400 font-mono">
+                            <span className="text-[8.5px] text-slate-500 font-mono">
                               Source: {isCustom ? "Pre-Sales Voice Asks" : "Official Catalog"}
                             </span>
                           </div>
@@ -602,14 +601,14 @@ export function SalesMobileApp({
                       );
                     })()}
 
-                    {/* Audio Waveform & Timer Recorder Shell */}
-                    <div className="p-4 bg-black rounded-2xl border border-neutral-800 text-center space-y-3">
-                      <div className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">
+                    {/* Audio Waveform & Timer Recorder Shell (Light Theme) */}
+                    <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs text-center space-y-3">
+                      <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
                         {isRecording ? "🔴 RECORDING IN PROGRESS" : "TEST RIDE AUDIO CAPTURE"}
                       </div>
 
                       {/* Timer Display */}
-                      <div className="text-3xl font-black font-mono text-white tracking-widest">
+                      <div className="text-3xl font-black font-mono text-slate-900 tracking-widest">
                         {formatTime(recordingSeconds)}
                       </div>
 
@@ -619,7 +618,7 @@ export function SalesMobileApp({
                           <span
                             key={i}
                             className={`w-1 rounded-full transition-all duration-150 ${
-                              isRecording && !isPaused ? "bg-red-500 animate-pulse" : "bg-neutral-800"
+                              isRecording && !isPaused ? "bg-red-600 animate-pulse" : "bg-slate-200"
                             }`}
                             style={{
                               height: isRecording && !isPaused ? `${h * 1.1}px` : "6px",
@@ -635,7 +634,7 @@ export function SalesMobileApp({
                           <div className="flex flex-col sm:flex-row items-center justify-center gap-2 w-full">
                             <button
                               onClick={startRecording}
-                              className="w-full sm:w-auto px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-950/60 cursor-pointer transition-all hover:scale-102"
+                              className="w-full sm:w-auto px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all hover:scale-102"
                             >
                               <Mic className="w-4 h-4" />
                               <span>Start Ride Recording</span>
@@ -644,9 +643,9 @@ export function SalesMobileApp({
                             <button
                               onClick={simulateTestDriveRecording}
                               disabled={isUploading}
-                              className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-purple-700 via-indigo-700 to-cyan-700 hover:from-purple-600 hover:to-cyan-600 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-purple-950/50 cursor-pointer transition-all hover:scale-102 disabled:opacity-50"
+                              className="w-full sm:w-auto px-4 py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all hover:scale-102 disabled:opacity-50"
                             >
-                              <Sparkles className="w-4 h-4 text-cyan-300 animate-pulse" />
+                              <Sparkles className="w-4 h-4 text-purple-200 animate-pulse" />
                               <span>Simulate Test Drive Recording</span>
                             </button>
                           </div>
@@ -655,7 +654,7 @@ export function SalesMobileApp({
                             {isPaused ? (
                               <button
                                 onClick={resumeRecording}
-                                className="p-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-full cursor-pointer"
+                                className="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full cursor-pointer shadow-xs"
                                 title="Resume"
                               >
                                 <Play className="w-4 h-4" />
@@ -663,7 +662,7 @@ export function SalesMobileApp({
                             ) : (
                               <button
                                 onClick={pauseRecording}
-                                className="p-2.5 bg-neutral-800 hover:bg-neutral-700 text-white rounded-full border border-neutral-700 cursor-pointer"
+                                className="p-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-full border border-slate-300 cursor-pointer shadow-2xs"
                                 title="Pause"
                               >
                                 <Pause className="w-4 h-4" />
@@ -672,7 +671,7 @@ export function SalesMobileApp({
 
                             <button
                               onClick={stopAndProcessRecording}
-                              className="px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-full text-xs flex items-center gap-1.5 shadow-md shadow-red-950/50 cursor-pointer"
+                              className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-full text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
                             >
                               <Square className="w-3.5 h-3.5" />
                               <span>Stop &amp; Upload to GCS</span>
@@ -683,42 +682,42 @@ export function SalesMobileApp({
                     </div>
 
                     {isUploading && (
-                      <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-300 text-center space-y-1">
-                        <UploadCloud className="w-5 h-5 animate-bounce mx-auto" />
+                      <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-center space-y-1 shadow-2xs">
+                        <UploadCloud className="w-5 h-5 animate-bounce text-amber-600 mx-auto" />
                         <p className="font-bold text-xs">Uploading Audio to Cloud Storage &amp; Analyzing...</p>
-                        <p className="text-[10px] text-neutral-400">Executing Multi-Dimensional Speech &amp; Sentiment AI</p>
+                        <p className="text-[10px] text-amber-800">Executing Gemini Speaker Diarization &amp; Sentiment AI</p>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* TAB 3: AI Insights */}
+                {/* TAB 3: AI Insights (Light Theme) */}
                 {activeTab === "insights" && (
                   <div className="space-y-3 text-left">
                     {insights ? (
                       <>
-                        <div className="p-3 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-2">
+                        <div className="p-3 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2">
                           <div className="flex items-center justify-between text-xs">
-                            <span className="font-bold text-white truncate">{insights.vehicle_name}</span>
-                            <span className="font-mono text-emerald-400 font-bold shrink-0">
+                            <span className="font-bold text-slate-900 truncate">{insights.vehicle_name}</span>
+                            <span className="font-mono text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
                               {Math.round(insights.purchase_intent_score * 100)}% Intent
                             </span>
                           </div>
-                          <div className="p-2 rounded-lg bg-black/60 border border-white/5 space-y-1">
-                            <span className="text-[9px] font-bold text-purple-400 uppercase tracking-wider block">GCS Audio Storage:</span>
-                            <div className="font-mono text-[9px] text-neutral-300 break-all select-all">
+                          <div className="p-2 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
+                            <span className="text-[9px] font-bold text-purple-700 uppercase tracking-wider block">GCS Audio Storage:</span>
+                            <div className="font-mono text-[9px] text-slate-800 break-all select-all font-semibold">
                               {insights.gcs_uri}
                             </div>
                           </div>
                         </div>
 
                         {/* Speaker Identified Test Ride Transcript */}
-                        <div className="p-3 rounded-2xl bg-black/80 border border-neutral-800 space-y-2">
+                        <div className="p-3 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-purple-400 uppercase flex items-center gap-1">
-                              <Volume2 className="w-3 h-3 text-purple-400" /> Test Ride Audio Transcript:
+                            <span className="text-[10px] font-bold text-purple-800 uppercase flex items-center gap-1">
+                              <Volume2 className="w-3 h-3 text-purple-600" /> Test Ride Audio Transcript:
                             </span>
-                            <span className="text-[9px] font-mono text-neutral-500">{insights.duration_seconds}s</span>
+                            <span className="text-[9px] font-mono text-slate-500">{insights.duration_seconds}s</span>
                           </div>
                           <div className="space-y-1.5 max-h-48 overflow-y-auto text-[10px] font-mono pr-1">
                             {insights.transcript.split("\n").map((line, idx) => {
@@ -727,10 +726,10 @@ export function SalesMobileApp({
                               return (
                                 <div
                                   key={idx}
-                                  className={`p-1.5 rounded-lg border leading-relaxed ${
+                                  className={`p-2 rounded-lg border leading-relaxed ${
                                     isAdv
-                                      ? "bg-purple-950/20 border-purple-800/30 text-purple-200"
-                                      : "bg-cyan-950/20 border-cyan-800/30 text-cyan-200"
+                                      ? "bg-purple-50 border-purple-200 text-purple-950"
+                                      : "bg-cyan-50 border-cyan-200 text-cyan-950"
                                   }`}
                                 >
                                   {line}
@@ -740,18 +739,18 @@ export function SalesMobileApp({
                           </div>
                         </div>
 
-                        <div className="p-3 rounded-2xl bg-emerald-950/30 border border-emerald-800/40 space-y-1">
-                          <span className="text-[10px] font-bold text-emerald-400 uppercase">Loved Features:</span>
-                          <ul className="text-[10px] text-neutral-300 list-disc pl-4 space-y-0.5">
+                        <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-1 shadow-2xs">
+                          <span className="text-[10px] font-bold text-emerald-800 uppercase">Loved Features:</span>
+                          <ul className="text-[10px] text-slate-700 list-disc pl-4 space-y-0.5">
                             {insights.loved_features.map((f, i) => (
                               <li key={i}>{f}</li>
                             ))}
                           </ul>
                         </div>
 
-                        <div className="p-3 rounded-2xl bg-amber-950/30 border border-amber-800/40 space-y-1">
-                          <span className="text-[10px] font-bold text-amber-400 uppercase">Objections Raised:</span>
-                          <ul className="text-[10px] text-neutral-300 list-disc pl-4 space-y-0.5">
+                        <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 space-y-1 shadow-2xs">
+                          <span className="text-[10px] font-bold text-amber-900 uppercase">Objections Raised:</span>
+                          <ul className="text-[10px] text-slate-700 list-disc pl-4 space-y-0.5">
                             {insights.objections_raised.map((o, i) => (
                               <li key={i}>{o}</li>
                             ))}
@@ -761,7 +760,7 @@ export function SalesMobileApp({
                         {onProceedToOutboundCall && (
                           <button
                             onClick={() => onProceedToOutboundCall(insights)}
-                            className="w-full py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-red-950/50 cursor-pointer"
+                            className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                           >
                             <PhoneCall className="w-3.5 h-3.5" />
                             <span>Proceed to Outbound Call (Stage 3)</span>
@@ -769,9 +768,9 @@ export function SalesMobileApp({
                         )}
                       </>
                     ) : (
-                      <div className="py-8 text-center text-neutral-400">
-                        <AlertCircle className="w-6 h-6 text-neutral-600 mx-auto mb-1" />
-                        <p>Complete a test drive recording first to generate AI insights.</p>
+                      <div className="py-8 text-center text-slate-400">
+                        <AlertCircle className="w-6 h-6 text-slate-400 mx-auto mb-1" />
+                        <p className="text-xs">Complete a test drive recording first to generate AI insights.</p>
                       </div>
                     )}
                   </div>
@@ -781,30 +780,30 @@ export function SalesMobileApp({
           </div>
         </div>
 
-        {/* Right 7 Cols: Detailed In-Vehicle Test Ride Audio & Insights Panel */}
+        {/* Right 7 Cols: Detailed In-Vehicle Test Ride Audio & Insights Panel (Crisp Light Theme) */}
         <div className="lg:col-span-7 space-y-4 text-left">
           {/* Active Vehicle Card (From Booking API) */}
-          <div className="p-5 rounded-2xl bg-neutral-900 border border-neutral-800 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full bg-red-600/30 text-red-300 border border-red-500/40 font-mono text-[10px] font-bold uppercase">
+                <span className="px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 font-mono text-[10px] font-bold uppercase">
                   Active Test Ride Vehicle
                 </span>
-                <span className="text-[11px] font-mono text-cyan-400 font-bold">
+                <span className="text-[11px] font-mono text-cyan-800 font-bold bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200">
                   {selectedLead?.booking_reference || "LIVE BOOKING"}
                 </span>
               </div>
-              <h3 className="text-xl font-black text-white">{currentVehicleObj.name}</h3>
-              <p className="text-xs text-amber-300 font-bold">
+              <h3 className="text-xl font-black text-slate-900">{currentVehicleObj.name}</h3>
+              <p className="text-xs text-amber-800 font-bold">
                 Variant: {selectedVariant} • Showroom: {selectedLead?.dealership_name || activeShowroomName}
               </p>
-              <p className="text-[11px] text-neutral-400">
-                Customer: <strong>{selectedLead?.name || "Aarav Sharma"}</strong> ({selectedLead?.phone || "+91 98201 23456"})
+              <p className="text-[11px] text-slate-600">
+                Customer: <strong className="text-slate-900">{selectedLead?.name || "Aarav Sharma"}</strong> ({selectedLead?.phone || "+91 98201 23456"})
               </p>
             </div>
 
             {/* Vehicle Image */}
-            <div className="relative w-36 h-24 rounded-xl overflow-hidden border border-neutral-700 bg-neutral-950 shrink-0">
+            <div className="relative w-36 h-24 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0 shadow-2xs">
               <img
                 src={
                   currentVehicleObj.hero_image ||
@@ -820,83 +819,83 @@ export function SalesMobileApp({
             </div>
           </div>
 
-          {/* AI Insights & Audio STT Transcript Details */}
+          {/* AI Insights & Audio STT Transcript Details (Light Theme) */}
           {insights ? (
             <div className="space-y-4 animate-in fade-in duration-300">
               {/* Score Metric Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3.5 rounded-2xl bg-neutral-900 border border-neutral-800">
-                  <span className="text-[10px] text-neutral-400 uppercase font-bold">Customer Sentiment</span>
-                  <p className="text-xl font-black text-emerald-400 mt-1">
+                <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-xs">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">Customer Sentiment</span>
+                  <p className="text-xl font-black text-emerald-600 mt-1">
                     {Math.round(insights.customer_sentiment_score * 100)}% Positive
                   </p>
                 </div>
-                <div className="p-3.5 rounded-2xl bg-neutral-900 border border-neutral-800">
-                  <span className="text-[10px] text-neutral-400 uppercase font-bold">Purchase Intent</span>
-                  <p className="text-xl font-black text-cyan-400 mt-1">
+                <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-xs">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">Purchase Intent</span>
+                  <p className="text-xl font-black text-cyan-600 mt-1">
                     {Math.round(insights.purchase_intent_score * 100)}% Ready
                   </p>
                 </div>
-                <div className="p-3.5 rounded-2xl bg-neutral-900 border border-neutral-800">
-                  <span className="text-[10px] text-neutral-400 uppercase font-bold">Advisor Pitch Score</span>
-                  <p className="text-xl font-black text-amber-400 mt-1">
+                <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-xs">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">Advisor Pitch Score</span>
+                  <p className="text-xl font-black text-amber-600 mt-1">
                     {insights.advisor_pitch_score} / 10
                   </p>
                 </div>
-                <div className="p-3.5 rounded-2xl bg-neutral-900 border border-neutral-800">
-                  <span className="text-[10px] text-neutral-400 uppercase font-bold">GCS Storage Status</span>
-                  <p className="text-xs font-mono font-bold text-purple-400 mt-2 truncate">
+                <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-xs">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">GCS Storage Status</span>
+                  <p className="text-xs font-mono font-bold text-purple-700 mt-2 truncate">
                     Uploaded (GCS)
                   </p>
                 </div>
               </div>
 
               {/* Full In-Vehicle Transcript Box */}
-              <div className="p-5 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-3 shadow-xl">
-                <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Volume2 className="w-4 h-4 text-purple-400" />
+              <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+                  <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Volume2 className="w-4 h-4 text-purple-600" />
                     <span>In-Vehicle Test Ride Audio STT Transcript (Multi-Turn)</span>
                   </h4>
-                  <span className="text-[10px] font-mono text-neutral-400">
+                  <span className="text-[10px] font-mono text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded">
                     Duration: {insights.duration_seconds}s
                   </span>
                 </div>
 
-                <div className="p-4 rounded-xl bg-black/70 border border-neutral-800 text-xs font-mono text-neutral-300 whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-800 whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
                   {insights.transcript}
                 </div>
               </div>
 
               {/* GCS URI Card */}
-              <div className="p-3.5 rounded-2xl bg-black/60 border border-neutral-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <div className="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-2xs">
                 <div>
-                  <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider block">GCS Cloud Storage Audio Path:</span>
-                  <p className="font-mono text-xs text-neutral-300 break-all select-all mt-0.5">{insights.gcs_uri}</p>
+                  <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider block">GCS Cloud Storage Audio Path:</span>
+                  <p className="font-mono text-xs text-purple-950 break-all select-all mt-0.5 font-bold">{insights.gcs_uri}</p>
                 </div>
-                <span className="text-[9px] font-bold font-mono px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 shrink-0">
+                <span className="text-[9px] font-bold font-mono px-2 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-300 shrink-0">
                   WAV 16kHz
                 </span>
               </div>
 
               {/* Loved Features & Objections Split Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-800/30 space-y-2">
-                  <span className="text-xs font-bold text-emerald-400 uppercase flex items-center gap-1">
+                <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 space-y-2 shadow-2xs">
+                  <span className="text-xs font-bold text-emerald-800 uppercase flex items-center gap-1">
                     ✓ Loved Features ({insights.loved_features.length})
                   </span>
-                  <ul className="text-xs text-neutral-300 space-y-1 list-disc pl-4">
+                  <ul className="text-xs text-slate-700 space-y-1 list-disc pl-4">
                     {insights.loved_features.map((f, i) => (
                       <li key={i}>{f}</li>
                     ))}
                   </ul>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-amber-950/20 border border-amber-800/30 space-y-2">
-                  <span className="text-xs font-bold text-amber-400 uppercase flex items-center gap-1">
-                    ⚠ Objections & Concerns ({insights.objections_raised.length})
+                <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 space-y-2 shadow-2xs">
+                  <span className="text-xs font-bold text-amber-900 uppercase flex items-center gap-1">
+                    ⚠ Objections &amp; Concerns ({insights.objections_raised.length})
                   </span>
-                  <ul className="text-xs text-neutral-300 space-y-1 list-disc pl-4">
+                  <ul className="text-xs text-slate-700 space-y-1 list-disc pl-4">
                     {insights.objections_raised.map((o, i) => (
                       <li key={i}>{o}</li>
                     ))}
@@ -905,15 +904,15 @@ export function SalesMobileApp({
               </div>
 
               {/* Coaching Feedback & Next Action */}
-              <div className="p-4 rounded-2xl bg-purple-950/30 border border-purple-800/40 space-y-2">
-                <h4 className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
-                  <TrendingUp className="w-4 h-4 text-purple-400" />
+              <div className="p-4 rounded-2xl bg-purple-50/80 border border-purple-200 space-y-2 shadow-2xs">
+                <h4 className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4 text-purple-600" />
                   <span>AI Coaching Feedback for Sales Advisor:</span>
                 </h4>
-                <p className="text-xs text-neutral-300 leading-relaxed">
+                <p className="text-xs text-slate-800 leading-relaxed">
                   {insights.advisor_coaching_feedback}
                 </p>
-                <div className="pt-2 border-t border-purple-800/30 text-xs text-amber-300 font-semibold">
+                <div className="pt-2 border-t border-purple-200 text-xs text-amber-900 font-bold">
                   Recommended Follow-up: {insights.recommended_action}
                 </div>
               </div>
@@ -922,7 +921,7 @@ export function SalesMobileApp({
                 <div className="pt-2">
                   <button
                     onClick={() => onProceedToOutboundCall(insights)}
-                    className="w-full py-3.5 bg-gradient-to-r from-red-600 via-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-xl shadow-red-950/60 transition-all hover:scale-101 cursor-pointer"
+                    className="w-full py-3.5 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-md transition-all hover:scale-101 cursor-pointer"
                   >
                     <PhoneCall className="w-4 h-4" />
                     <span>Proceed to Proactive Outbound Call Simulator (Stage 3)</span>
@@ -931,12 +930,12 @@ export function SalesMobileApp({
               )}
             </div>
           ) : (
-            <div className="p-8 rounded-2xl bg-neutral-900/60 border border-neutral-800 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center mx-auto text-neutral-400">
-                <Mic className="w-6 h-6" />
+            <div className="p-8 rounded-2xl bg-white border border-dashed border-slate-300 text-center space-y-3 shadow-xs">
+              <div className="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center mx-auto text-slate-500">
+                <Mic className="w-6 h-6 text-red-600" />
               </div>
-              <h4 className="text-base font-bold text-white">Ready for Test Ride Audio Capture</h4>
-              <p className="text-xs text-neutral-400 max-w-md mx-auto">
+              <h4 className="text-base font-bold text-slate-900">Ready for Test Ride Audio Capture</h4>
+              <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
                 Select a customer lead on the mobile phone interface, tap &quot;Start Ride Recording&quot; to begin in-cabin audio recording, and upload to GCS to generate STT transcript and buyer sentiment analytics.
               </p>
             </div>
