@@ -52,8 +52,8 @@ export function Header({
           </span>
         </div>
 
-        {/* Omnichannel Journey Stage Navigation */}
-        <nav className="flex items-center gap-1 bg-slate-100 p-1 rounded-full border border-slate-200 text-xs overflow-x-auto max-w-[580px]">
+        {/* Omnichannel Journey Stage Navigation (Fixed, No Scrollbar) */}
+        <nav className="flex items-center gap-1 bg-slate-100 p-1 rounded-full border border-slate-200 text-xs shrink-0 select-none">
           {stages.map((st) => {
             const Icon = st.icon;
             const isActive = activeStage === st.id;
@@ -61,15 +61,15 @@ export function Header({
               <button
                 key={st.id}
                 onClick={() => onSelectStage(st.id)}
-                className={`px-3.5 py-1.5 rounded-full flex items-center gap-1.5 font-bold transition-all whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 font-bold transition-all whitespace-nowrap cursor-pointer ${
                   isActive
-                    ? "bg-red-600 text-white shadow-sm"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                    ? "bg-red-600 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/70"
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">{st.label}</span>
-                <span className="inline md:hidden">{st.label.split(". ")[0]}</span>
+                <Icon className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden lg:inline">{st.label}</span>
+                <span className="inline lg:hidden">{st.label.replace(/^\d+\.\s*/, "")}</span>
               </button>
             );
           })}

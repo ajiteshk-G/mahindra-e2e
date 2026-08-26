@@ -187,21 +187,9 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
               ];
             });
 
-            // Speak greeting and responses with Web Speech API if PCM audio stream is not present
-            if (typeof window !== "undefined" && "speechSynthesis" in window && !payload.audio_b64) {
-              try {
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(payload.message);
-                utterance.lang = (detectedLang === "English" || detectedLang === "en-IN") ? "en-IN" : "hi-IN";
-                utterance.rate = 1.02;
-                utterance.pitch = 1.0;
-                utterance.onstart = () => setRmsLevel(0.45);
-                utterance.onend = () => setRmsLevel(0);
-                utterance.onerror = () => setRmsLevel(0);
-                window.speechSynthesis.speak(utterance);
-              } catch (ttsErr) {
-                console.debug("TTS notice:", ttsErr);
-              }
+            // Ensure any rogue browser synthetic speech is cancelled
+            if (typeof window !== "undefined" && "speechSynthesis" in window) {
+              window.speechSynthesis.cancel();
             }
 
             const words = (payload.message || "").split(/\s+/).length;
@@ -482,19 +470,7 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
                 ]);
 
                 if (typeof window !== "undefined" && "speechSynthesis" in window) {
-                  try {
-                    window.speechSynthesis.cancel();
-                    const utterance = new SpeechSynthesisUtterance(data.message);
-                    utterance.lang = (detectedLang === "English" || detectedLang === "en-IN") ? "en-IN" : "hi-IN";
-                    utterance.rate = 1.02;
-                    utterance.pitch = 1.0;
-                    utterance.onstart = () => setRmsLevel(0.45);
-                    utterance.onend = () => setRmsLevel(0);
-                    utterance.onerror = () => setRmsLevel(0);
-                    window.speechSynthesis.speak(utterance);
-                  } catch (ttsErr) {
-                    console.debug("TTS notice:", ttsErr);
-                  }
+                  window.speechSynthesis.cancel();
                 }
               }
             } catch (err) {
