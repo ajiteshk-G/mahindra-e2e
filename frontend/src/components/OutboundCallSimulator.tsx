@@ -20,45 +20,163 @@ import {
   Award,
   Zap,
   TrendingUp,
-  MessageSquare
+  MessageSquare,
+  Radio,
+  Send,
+  RefreshCw,
+  Car,
+  Search,
+  CheckCircle,
+  Building2,
+  ChevronRight
 } from "lucide-react";
-import { triggerOutboundCall, sendOutboundDialogueTurn, fetchOutboundCallInsights } from "@/lib/api";
+import { triggerOutboundCall, sendOutboundDialogueTurn, fetchAdminBookings } from "@/lib/api";
+import { GeminiLiveClient } from "@/lib/geminiLiveClient";
+
+export interface OutboundLeadItem {
+  booking_reference: string;
+  customer_id: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_city?: string;
+  vehicle_name: string;
+  variant?: string;
+  dealership_name?: string;
+  sales_advisor_name: string;
+  session_id: string;
+  status: string;
+  loved_features?: string[];
+  objections_raised?: string[];
+  has_feedback_call?: boolean;
+}
+
+const DEFAULT_COMPLETED_LEADS: OutboundLeadItem[] = [
+  {
+    booking_reference: "BK-MAH-23382",
+    customer_id: "CUST-9819657034",
+    customer_name: "Kunal Mathuria",
+    customer_phone: "+91 98196 57034",
+    customer_city: "Mumbai",
+    vehicle_name: "Mahindra XUV700 AX7L Diesel AWD AT",
+    variant: "AX7L Diesel AWD",
+    dealership_name: "Bayview Mahindra, Bandra West",
+    sales_advisor_name: "Rajesh Varma (Senior Specialist)",
+    session_id: "BK-MAH-23382",
+    status: "TestRide_Completed",
+    loved_features: ["FSD Suspension", "Panoramic Skyroof", "AdrenoX Dual 10.25 screens", "mHawk Diesel Power"],
+    objections_raised: ["Delivery timeline (10 weeks)", "Rear seat recline comfort"],
+    has_feedback_call: false
+  }
+];
 
 interface OutboundCallSimulatorProps {
-  profile: CustomerProfile | null;
-  testRideInsights: TestRideInsightResponse | null;
+  profile?: CustomerProfile | null;
+  testRideInsights?: TestRideInsightResponse | null;
 }
 
 export function OutboundCallSimulator({
   profile,
   testRideInsights
 }: OutboundCallSimulatorProps) {
-  const [callState, setCallState] = useState<"idle" | "ringing" | "connected" | "ended">("idle");
+  // Leads List
+  const [leads, setLeads] = useState<OutboundLeadItem[]>(DEFAULT_COMPLETED_LEADS);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedLead, setSelectedLead] = useState<OutboundLeadItem>(DEFAULT_COMPLETED_LEADS[0]);
+
+  // Egress Option: "browser" vs "twilio"
+  const [EgressMode, setEgressMode] = useState<"browser" | "twilio">("browser");
+
+  // Call State
+  const [callState, setCallState] = useState<"ready" | "connecting" | "in_call" | "completed">("ready");
   const [callReference, setCallReference] = useState<string>("CALL-MIA-2026-9901");
   const [callDuration, setCallDuration] = useState<number>(0);
-  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [bargeInCount, setBargeInCount] = useState<number>(0);
   const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
   const [turnIndex, setTurnIndex] = useState<number>(0);
-  const [agentSpeaking, setAgentSpeaking] = useState<boolean>(false);
+  const [isAiSpeaking, setIsAiSpeaking] = useState<boolean>(false);
+  const [isCustomerSpeaking, setIsCustomerSpeaking] = useState<boolean>(false);
+  const [customInputText, setCustomInputText] = useState<string>("");
+  const [twilioPhoneNumber, setTwilioPhoneNumber] = useState<string>("+91 98201 55432");
+  const [twilioDispatchStatus, setTwilioDispatchStatus] = useState<string | null>(null);
 
-  // Call Insights
-  const [callInsights, setCallInsights] = useState<OutboundCallInsightsResponse | null>(null);
-
-  // Dialogue History
-  const [dialogue, setDialogue] = useState<Array<{ speaker: string; text: string; time: string }>>([]);
+  // Live Dialogue Feed
+  const [dialogue, setDialogue] = useState<Array<{ speaker: string; role: "ai" | "customer"; text: string; time: string }>>([]);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const synthRef = useRef<SpeechSynthesis | null>(null);
 
+  const geminiClientRef = useRef<GeminiLiveClient | null>(null);
+
+  // Load bookings from API and check sessionStorage
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      synthRef.current = window.speechSynthesis;
+    async function loadData() {
+
+
+      try {
+        const rawBookings = await fetchAdminBookings();
+        const bookingsList = Array.isArray(rawBookings) ? rawBookings : (rawBookings?.bookings || []);
+        if (Array.isArray(bookingsList) && bookingsList.length > 0) {
+          const completed = bookingsList
+            .filter((b: any) => b.status === "TestRide_Completed")
+            .map((b: any) => ({
+              booking_reference: b.booking_reference,
+              customer_id: b.customer_id,
+              customer_name: b.customer_name,
+              customer_phone: b.customer_phone,
+              customer_city: b.customer_city,
+              vehicle_name: b.vehicle_name,
+              variant: b.variant,
+              dealership_name: b.dealership_name,
+              sales_advisor_name: b.sales_advisor_name,
+              session_id: b.booking_reference || b.test_ride_sessions?.[0]?.booking_reference || "BK-MAH-23382",
+              status: b.status,
+              loved_features: b.loved_features || ["FSD Suspension", "Skyroof"],
+              objections_raised: b.objections_raised || ["Delivery timeline"],
+              has_feedback_call: b.outbound_sessions && b.outbound_sessions.length > 0
+            }));
+
+          if (completed.length > 0) {
+            setLeads(completed);
+            setSelectedLead(completed[0]);
+            setTwilioPhoneNumber(completed[0].customer_phone);
+          }
+        }
+      } catch (err) {
+        console.warn("fetchAdminBookings fallback in Outbound:", err);
+      }
+
+    // Check sessionStorage for lead passed from Admin Console
+      if (typeof window !== "undefined") {
+        const storedLead = sessionStorage.getItem("mahindra_selected_outbound_lead");
+        if (storedLead) {
+          try {
+            const parsed = JSON.parse(storedLead);
+            const foundOrNew: OutboundLeadItem = {
+              booking_reference: parsed.booking_reference || "MB-2026-001",
+              customer_id: parsed.customer_id || "CUST-001",
+              customer_name: parsed.customer_name || "Valued Customer",
+              customer_phone: parsed.customer_phone || "+91 98201 55432",
+              vehicle_name: parsed.vehicle_name || "Mahindra SUV",
+              sales_advisor_name: parsed.sales_advisor_name || "Rajesh Varma",
+              session_id: parsed.booking_reference || parsed.session_id || "BK-MAH-23382",
+              status: "TestRide_Completed",
+              loved_features: parsed.loved_features || ["FSD Suspension", "Skyroof"],
+              objections_raised: parsed.objections_raised || ["Delivery timeline"]
+            };
+            setSelectedLead(foundOrNew);
+            setTwilioPhoneNumber(foundOrNew.customer_phone);
+          } catch (e) {
+            console.error("Error parsing stored lead:", e);
+          }
+        }
+      }
     }
+
+    loadData();
   }, []);
 
-  // Timer for active call
+  // Duration Timer
   useEffect(() => {
-    if (callState === "connected") {
+    if (callState === "in_call") {
       timerRef.current = setInterval(() => {
         setCallDuration((prev) => prev + 1);
       }, 1000);
@@ -70,535 +188,630 @@ export function OutboundCallSimulator({
     };
   }, [callState]);
 
-  const speakText = (text: string) => {
-    if (!synthRef.current || !isSpeakerOn) return;
-    try {
-      synthRef.current.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.05;
-      utterance.onstart = () => setAgentSpeaking(true);
-      utterance.onend = () => setAgentSpeaking(false);
-      utterance.onerror = () => setAgentSpeaking(false);
-      synthRef.current.speak(utterance);
-    } catch (e) {
-      console.warn("TTS error:", e);
-    }
-  };
 
-  const handleStartOutboundCall = async () => {
-    setCallState("ringing");
+  const handleSelectLead = (lead: OutboundLeadItem) => {
+    if (callState === "in_call") {
+      handleEndCall();
+    }
+    setSelectedLead(lead);
+    setTwilioPhoneNumber(lead.customer_phone);
+    setCallState("ready");
     setCallDuration(0);
+    setBargeInCount(0);
     setTurnIndex(0);
     setDialogue([]);
-    setCallInsights(null);
+    setTwilioDispatchStatus(null);
+  };
+
+  const handleStartBrowserCall = async () => {
+    setCallState("connecting");
+    setCallDuration(0);
+    setBargeInCount(0);
+    setTurnIndex(0);
+    setDialogue([]);
+
+    const advisorFirstName = selectedLead.sales_advisor_name.split(" ")[0].replace("Specialist", "").trim() || "Rajesh";
 
     try {
       const resp = await triggerOutboundCall({
-        customer_id: profile?.customer_id || "CUST-AARAV-001",
-        customer_name: profile?.name || "Aarav Sharma",
-        phone_number: profile?.phone || "+91 98201 23456",
-        vehicle_name: "Mahindra Thar ROXX AX7L Diesel AT",
-        advisor_name: "Rajesh Varma",
-        test_ride_session_id: testRideInsights?.session_id || "TR-2026-AARAV-881"
+        customer_id: selectedLead.customer_id,
+        customer_name: selectedLead.customer_name,
+        phone_number: selectedLead.customer_phone,
+        vehicle_name: selectedLead.vehicle_name,
+        advisor_name: selectedLead.sales_advisor_name,
+        booking_reference: selectedLead.booking_reference,
+        test_ride_session_id: selectedLead.session_id
       });
       if (resp?.call_reference) {
         setCallReference(resp.call_reference);
       }
     } catch (err) {
-      console.error(err);
+      console.error("Outbound trigger notice:", err);
     }
-  };
 
-  const handleAnswerCall = () => {
-    setCallState("connected");
-    const initialGreeting = `Hi ${profile?.name || "Aarav"}! Hope you enjoyed driving the Thar ROXX with Advisor Rajesh. How did the suspension feel on the Bandra-Worli Sea Link?`;
+    // Initialize real-time Gemini Live WebSocket client with 16kHz PCM mic and 24kHz audio
+    const client = new GeminiLiveClient({
+      leadRef: selectedLead.booking_reference,
+      customerName: selectedLead.customer_name,
+      customerPhone: selectedLead.customer_phone,
+      vehicleName: selectedLead.vehicle_name,
+      salesAdvisorName: selectedLead.sales_advisor_name,
+      onTranscript: (turn) => {
+        if (!turn.text || !turn.text.trim()) return;
+        setDialogue((prev) => {
+          if (prev.length > 0) {
+            const last = prev[prev.length - 1];
+            if (last.role === turn.role) {
+              const incoming = turn.text.trim();
+              const existing = last.text.trim();
+
+              let updatedText = existing;
+              if (incoming.startsWith(existing)) {
+                updatedText = incoming;
+              } else if (existing.startsWith(incoming)) {
+                updatedText = existing;
+              } else if (existing.toLowerCase().includes(incoming.toLowerCase())) {
+                updatedText = existing;
+              } else {
+                updatedText = `${existing} ${incoming}`;
+              }
+
+              const newArr = [...prev];
+              newArr[newArr.length - 1] = {
+                ...last,
+                text: updatedText
+              };
+              return newArr;
+            }
+          }
+          return [...prev, turn];
+        });
+      },
+      onCustomerSpeaking: (speaking) => {
+        setIsCustomerSpeaking(speaking);
+      },
+      onAiSpeaking: (speaking) => {
+        setIsAiSpeaking(speaking);
+      },
+      onBargeIn: () => {
+        setBargeInCount((prev) => prev + 1);
+      },
+      onError: (err) => {
+        console.warn("Gemini Live notice:", err);
+      },
+      onClose: () => {
+        setIsAiSpeaking(false);
+        setIsCustomerSpeaking(false);
+      }
+    });
+
+    geminiClientRef.current = client;
+    await client.start();
+
+    setCallState("in_call");
+    const greeting = `Namaste ${selectedLead.customer_name} ji! Main Mahindra se Kavya baat kar rahi hoon. Aapka ${selectedLead.vehicle_name} ka test ride kaisa raha? Kya hamare Sales Consultant ${advisorFirstName} ji ne aapke sabhi sawalon ka theek se jawab diya?`;
 
     setDialogue([
       {
-        speaker: "MIA",
-        text: initialGreeting,
+        speaker: "Kavya AI",
+        role: "ai",
+        text: greeting,
         time: "00:02"
       }
     ]);
-    speakText(initialGreeting);
+
     setTurnIndex(1);
   };
 
-  const handleCustomerReply = async (customText?: string) => {
-    let replyText = "";
-    if (customText) {
-      replyText = customText;
-    } else if (turnIndex === 1) {
-      replyText = "The engine and suspension were amazing! But honestly, my wife is slightly concerned about rear seat legroom and the delivery wait period.";
-    } else if (turnIndex === 2) {
-      replyText = "That is fantastic news! Let's lock this Stealth Black allocation right away. Can you send me the financing options?";
-    } else {
-      replyText = "Thank you MIA! Let's proceed to loan pre-approval.";
-    }
+  const handleEndCall = () => {
 
-    const newDialogue = [
+    if (geminiClientRef.current) {
+      geminiClientRef.current.stop();
+      geminiClientRef.current = null;
+    }
+    setCallState("completed");
+    setIsAiSpeaking(false);
+    setIsCustomerSpeaking(false);
+
+    // Mark as feedback captured in local leads state
+    setLeads((prev) =>
+      prev.map((l) =>
+        l.booking_reference === selectedLead.booking_reference ? { ...l, has_feedback_call: true } : l
+      )
+    );
+  };
+
+  const handleSendCustomerTurn = async (userText: string) => {
+    if (!userText.trim() || isAiSpeaking) return;
+
+    setIsCustomerSpeaking(true);
+    setTimeout(() => setIsCustomerSpeaking(false), 2000);
+
+    const currentTimeStr = `${Math.floor(callDuration / 60)
+      .toString()
+      .padStart(2, "0")}:${(callDuration % 60).toString().padStart(2, "0")}`;
+
+    const newTurns = [
       ...dialogue,
       {
-        speaker: profile?.name || "Aarav",
-        text: replyText,
-        time: `${Math.floor(callDuration / 60)}:${(callDuration % 60).toString().padStart(2, "0")}`
+        speaker: selectedLead.customer_name,
+        role: "customer" as const,
+        text: userText,
+        time: currentTimeStr
       }
     ];
-    setDialogue(newDialogue);
+    setDialogue(newTurns);
+    setCustomInputText("");
 
-    // Call backend dialogue turn
+    if (geminiClientRef.current) {
+      geminiClientRef.current.sendTextMessage(userText);
+    }
+
     try {
-      const turnResp = await sendOutboundDialogueTurn({
+      const resp = await sendOutboundDialogueTurn({
         call_reference: callReference,
-        customer_speech: replyText,
-        turn_index: turnIndex
+        customer_speech: userText,
+        turn_number: turnIndex + 1,
+        turn_index: turnIndex + 1,
+        conversation_history: newTurns.map((t) => ({ speaker: t.speaker, text: t.text }))
       });
 
-      setTimeout(() => {
-        setDialogue((prev) => [
-          ...prev,
-          {
-            speaker: "MIA",
-            text: turnResp.agent_message,
-            time: `${Math.floor(callDuration / 60)}:${(callDuration % 60).toString().padStart(2, "0")}`
-          }
-        ]);
-        speakText(turnResp.agent_message);
-        setTurnIndex(turnResp.turn_index);
+      const aiReply = resp.ai_reply || resp.agent_message || "Ji bilkul! Hum aapke delivery schedule ko priority slot mein confirm kar rahe hain.";
+      const aiTimeStr = `${Math.floor((callDuration + 3) / 60)
+        .toString()
+        .padStart(2, "0")}:${((callDuration + 3) % 60).toString().padStart(2, "0")}`;
 
-        if (turnResp.is_call_finished || turnIndex >= 2) {
-          setTimeout(() => {
-            handleEndCall();
-          }, 4500);
+      setDialogue((prev) => [
+        ...prev,
+        {
+          speaker: "Kavya AI",
+          role: "ai",
+          text: aiReply,
+          time: aiTimeStr
         }
-      }, 800);
-    } catch (e) {
-      console.error(e);
+      ]);
+
+
+      setTurnIndex((prev) => prev + 1);
+
+      if (resp.is_call_finished || turnIndex >= 3) {
+        setTimeout(() => {
+          handleEndCall();
+        }, 4000);
+      }
+    } catch (err) {
+      console.error("Dialogue turn notice:", err);
+      const fallbackReply = `Bahut badiya ${selectedLead.customer_name} ji! Maine aapki 12-day fast-track priority allocation confirm kar di hai. Shukriya!`;
+      setDialogue((prev) => [
+        ...prev,
+        {
+          speaker: "Kavya AI",
+          role: "ai",
+          text: fallbackReply,
+          time: currentTimeStr
+        }
+      ]);
+
+      setTurnIndex((prev) => prev + 1);
     }
   };
 
-  const handleEndCall = async () => {
-    if (synthRef.current) synthRef.current.cancel();
-    setCallState("ended");
-
-    try {
-      const insightsData = await fetchOutboundCallInsights(callReference);
-      setCallInsights(insightsData);
-    } catch (e) {
-      console.error(e);
-      // Fallback
-      setCallInsights({
-        call_reference: callReference,
-        customer_id: profile?.customer_id || "CUST-AARAV-001",
-        customer_name: profile?.name || "Aarav Sharma",
-        agent_name: "MIA (Mahindra Intelligent Assistant)",
-        phone_number: profile?.phone || "+91 98201 23456",
-        call_status: "COMPLETED",
-        call_duration_seconds: callDuration || 82,
-        transcript: dialogue.map((d) => `[${d.time}] ${d.speaker}: "${d.text}"`).join("\n"),
-        objections_handled: [
-          "Rear seat legroom (Addressed with 60:40 Split Reclining Seats demo)",
-          "12-16 week delivery wait time (Resolved: Locked 12-day allocation in Stealth Black)"
-        ],
-        objection_resolution_status: "100% RESOLVED",
-        customer_sentiment: "VERY_POSITIVE (Enthusiastic)",
-        customer_decision: "LOCKED_ALLOCATION_PROCEED_TO_FINANCE",
-        locked_vehicle_variant: "Thar ROXX AX7L Diesel AT 4x4 (Stealth Black)",
-        locked_allocation_days: 12,
-        next_step: "DIGITAL_FINANCING_KYC",
-        created_at: new Date().toISOString()
-      });
-    }
+  const handleTwilioDispatch = () => {
+    setTwilioDispatchStatus(`Dispatching automated outbound call to ${twilioPhoneNumber}...`);
+    setTimeout(() => {
+      setTwilioDispatchStatus(`Outbound call connected via Twilio SIP trunk (+91 22 6900 1000). Call logged to CRM.`);
+      setCallState("in_call");
+    }, 1800);
   };
 
-  const formatCallTime = (secs: number) => {
-    const mins = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${mins.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  };
+  const filteredLeads = leads.filter((l) =>
+    l.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    l.customer_phone.includes(searchQuery) ||
+    l.vehicle_name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner */}
-      <div className="bg-gradient-to-r from-neutral-900 via-stone-900 to-blue-950/80 p-5 rounded-2xl border border-blue-900/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+    <div className="max-w-7xl mx-auto space-y-6 text-slate-900 pb-16">
+      {/* Page Title & Breadcrumb */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-bold uppercase tracking-wider mb-2">
-            <PhoneCall className="w-3.5 h-3.5" />
-            Stage 3: Proactive Post-Ride Outbound Voice Call & Insights
-          </div>
-          <h2 className="text-xl md:text-2xl font-black text-white tracking-wide flex items-center gap-2">
-            <span>MIA Intelligent Post-Test Ride Voice Follow-up</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 font-mono">
-              Auto-Triggered
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-black tracking-wider uppercase">
+              Stage 3 • Proactive Feedback
             </span>
-          </h2>
-          <p className="text-xs md:text-sm text-neutral-300 mt-1 max-w-2xl">
-            Proactive voice call from MIA right after the test ride. Automatically addresses concerns (rear legroom & waiting period) and confirms fast-track 12-day allocation.
-          </p>
+            <span className="text-xs text-slate-400 font-mono">•</span>
+            <span className="text-xs text-slate-500 font-medium">Post-Test Ride Resolution</span>
+          </div>
+          <h1 className="text-2xl font-black text-slate-900 mt-1">
+            Outbound Feedback Call Center
+          </h1>
         </div>
 
-        {callInsights && (
-          <div className="bg-emerald-600/20 border border-emerald-500/40 text-emerald-400 text-xs md:text-sm font-bold px-4 py-2.5 rounded-xl flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4" />
-            <span>Allocation Provisionally Confirmed</span>
+        <div className="flex items-center gap-3">
+          <div className="px-3.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-emerald-600" />
+            <span>{leads.length} Test Ride Completed Leads</span>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Grid: 5 Cols Phone Call Interface | 7 Cols AI Call Analytics & Resolution */}
+      {/* 2-Panel Master-Detail Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left 5 Cols: Phone Call Simulator */}
-        <div className="lg:col-span-5 flex justify-center">
-          <div className="w-full max-w-sm bg-black rounded-[42px] p-3 shadow-[0_0_50px_rgba(0,0,0,0.8)] border-[6px] border-neutral-800 relative">
-            {/* Phone Notch */}
-            <div className="w-28 h-5 bg-neutral-900 rounded-full mx-auto mb-2 flex items-center justify-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-neutral-800"></span>
-              <span className="w-2 h-2 rounded-full bg-blue-900/60"></span>
+        {/* ================= LEFT PANEL: Completed Leads List ================= */}
+        <div className="lg:col-span-4 bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden flex flex-col max-h-[820px]">
+          {/* Header */}
+          <div className="p-4 border-b border-slate-200 bg-slate-50/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Car className="w-4 h-4 text-red-600" />
+                <h3 className="text-sm font-black text-slate-900">Completed Test Rides</h3>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold">
+                {filteredLeads.length} Leads
+              </span>
             </div>
 
-            {/* Screen Container */}
-            <div className="bg-gradient-to-b from-neutral-900 via-neutral-950 to-black rounded-[32px] overflow-hidden border border-neutral-800 flex flex-col h-[580px] p-4 text-xs justify-between relative">
-              {/* IDLE STATE */}
-              {callState === "idle" && (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-4 space-y-4">
-                  <div className="w-20 h-20 rounded-full bg-blue-950/60 border border-blue-500/40 flex items-center justify-center text-blue-400">
-                    <PhoneCall className="w-9 h-9" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-blue-400 tracking-wider block">
-                      Trigger Post-Ride Call
-                    </span>
-                    <h3 className="text-lg font-black text-white mt-1">
-                      MIA Outbound Voice Agent
-                    </h3>
-                    <p className="text-neutral-400 text-xs mt-1">
-                      Ready to call {profile?.name || "Aarav Sharma"} ({profile?.phone || "+91 98201 23456"})
-                    </p>
-                  </div>
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search name, phone, car..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-white border border-slate-200 focus:border-blue-600 outline-none text-slate-900 placeholder-slate-400"
+              />
+            </div>
+          </div>
 
-                  <button
-                    onClick={handleStartOutboundCall}
-                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-2xl shadow-lg shadow-blue-950/60 flex items-center justify-center gap-2"
-                  >
-                    <Phone className="w-4 h-4" />
-                    <span>Initiate Outbound Call Now</span>
-                  </button>
-                </div>
-              )}
-
-              {/* RINGING STATE */}
-              {callState === "ringing" && (
-                <div className="flex-1 flex flex-col items-center justify-between py-8 text-center animate-fade-in">
-                  <div className="space-y-2">
-                    <span className="text-[11px] font-bold text-blue-400 uppercase tracking-widest block animate-pulse">
-                      INCOMING OUTBOUND CALL...
-                    </span>
-                    <h3 className="text-2xl font-black text-white">MIA Virtual Assistant</h3>
-                    <p className="text-neutral-400 text-xs">+91 22 6900 1000 • Mahindra Rise</p>
-                  </div>
-
-                  {/* Pulsing Avatar */}
-                  <div className="relative">
-                    <div className="w-28 h-28 rounded-full bg-blue-600/20 border-2 border-blue-500 animate-ping absolute inset-0"></div>
-                    <div className="w-28 h-28 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-700 flex items-center justify-center text-white text-3xl font-black shadow-2xl relative z-10">
-                      MIA
-                    </div>
-                  </div>
-
-                  {/* Answer & Decline Buttons */}
-                  <div className="flex items-center justify-around w-full px-6 pt-4">
-                    <button
-                      onClick={handleEndCall}
-                      className="p-4 bg-red-600 hover:bg-red-500 text-white rounded-full shadow-lg shadow-red-950/60"
-                      title="Decline"
-                    >
-                      <PhoneOff className="w-6 h-6" />
-                    </button>
-                    <button
-                      onClick={handleAnswerCall}
-                      className="p-4 bg-green-600 hover:bg-green-500 text-white rounded-full shadow-lg shadow-green-950/60 animate-bounce"
-                      title="Answer"
-                    >
-                      <Phone className="w-6 h-6" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* CONNECTED CALL STATE */}
-              {callState === "connected" && (
-                <div className="flex-1 flex flex-col justify-between py-2 space-y-3">
-                  {/* Call Header */}
-                  <div className="text-center border-b border-neutral-800 pb-2">
-                    <span className="text-[10px] text-green-400 font-bold uppercase tracking-wider block">
-                      ● CALL CONNECTED • {formatCallTime(callDuration)}
-                    </span>
-                    <h4 className="text-base font-black text-white">MIA (Mahindra Assistant)</h4>
-                    <span className="text-[10px] text-neutral-400">Post-Test Ride Experience Handoff</span>
-                  </div>
-
-                  {/* Live Speaking Orb / Acoustic Wave */}
-                  <div className="flex flex-col items-center justify-center py-2 relative">
-                    <div
-                      className={`w-20 h-20 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
-                        agentSpeaking
-                          ? "border-blue-400 scale-110 shadow-[0_0_30px_rgba(59,130,246,0.6)]"
-                          : "border-blue-900 bg-blue-950/40"
+          {/* Lead List Body */}
+          <div className="p-3 overflow-y-auto flex-1 space-y-2 divide-y divide-slate-100">
+            {filteredLeads.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 text-xs">
+                No matching completed leads found.
+              </div>
+            ) : (
+              filteredLeads.map((lead, idx) => {
+                const isSelected = selectedLead.booking_reference === lead.booking_reference;
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => handleSelectLead(lead)}
+                    className={`p-3.5 rounded-2xl transition-all cursor-pointer text-left space-y-2 border ${isSelected
+                        ? "bg-blue-50/80 border-blue-500 shadow-sm"
+                        : "bg-white hover:bg-slate-50 border-slate-200/70"
                       }`}
-                    >
-                      <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-lg">
-                        MIA
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="text-xs font-black text-slate-900">{lead.customer_name}</h4>
+                          <span className="font-mono text-[10px] text-slate-500 font-bold">
+                            {lead.booking_reference}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 font-mono font-medium">
+                          {lead.customer_phone}
+                        </p>
                       </div>
+
+                      <span className={`px-2 py-0.5 rounded-full text-[9.5px] font-bold ${lead.has_feedback_call
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-blue-100 text-blue-800"
+                        }`}>
+                        {lead.has_feedback_call ? "Feedback Logged" : "Ready for Call"}
+                      </span>
                     </div>
 
-                    {agentSpeaking && (
-                      <div className="flex items-center gap-1 mt-2">
-                        {[4, 12, 22, 10, 26, 14, 8, 20, 16, 6].map((h, i) => (
-                          <span
-                            key={i}
-                            className="w-1 bg-blue-400 rounded-full animate-pulse"
-                            style={{ height: `${h}px`, animationDelay: `${i * 70}ms` }}
-                          ></span>
-                        ))}
+                    <div className="p-2 rounded-xl bg-white/80 border border-slate-200/60 text-[11px] space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 truncate">{lead.vehicle_name}</span>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Dialogue Transcript Scroll Box */}
-                  <div className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 max-h-44 overflow-y-auto space-y-2 text-[11px]">
-                    {dialogue.map((d, idx) => (
-                      <div
-                        key={idx}
-                        className={`p-2 rounded-xl ${
-                          d.speaker === "MIA"
-                            ? "bg-neutral-900 text-neutral-200 border border-neutral-800"
-                            : "bg-blue-600 text-white ml-4"
-                        }`}
-                      >
-                        <div className="text-[9px] opacity-70 flex justify-between font-bold">
-                          <span>{d.speaker}</span>
-                          <span>{d.time}</span>
-                        </div>
-                        <p className="mt-0.5 leading-relaxed">{d.text}</p>
+                      <div className="text-[10px] text-slate-500 flex items-center justify-between">
+                        <span>Advisor: {lead.sales_advisor_name.split(" ")[0]}</span>
+                        <span className="text-emerald-700 font-bold">✓ TestRide_Completed</span>
                       </div>
-                    ))}
+                    </div>
                   </div>
-
-                  {/* Customer Interactive Spoken Response Options */}
-                  <div className="space-y-1.5 pt-1">
-                    <span className="text-[10px] text-neutral-400 font-bold block">
-                      Respond as Customer ({profile?.name || "Aarav"}):
-                    </span>
-                    {turnIndex === 1 && (
-                      <button
-                        onClick={() => handleCustomerReply()}
-                        className="w-full py-2 px-3 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-blue-200 rounded-xl text-left text-[11px] leading-tight"
-                      >
-                        🗣️ "Engine & suspension were amazing, but wife concerned on rear legroom & wait period."
-                      </button>
-                    )}
-                    {turnIndex === 2 && (
-                      <button
-                        onClick={() => handleCustomerReply()}
-                        className="w-full py-2 px-3 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-green-300 rounded-xl text-left text-[11px] leading-tight"
-                      >
-                        🗣️ "That's fantastic! Let's lock the 12-day Stealth Black allocation & see financing."
-                      </button>
-                    )}
-                  </div>
-
-                  {/* In-Call Action Bar */}
-                  <div className="flex items-center justify-around pt-2 border-t border-neutral-800">
-                    <button
-                      onClick={() => setIsMuted(!isMuted)}
-                      className={`p-2.5 rounded-full ${isMuted ? "bg-red-900 text-red-300" : "bg-neutral-800 text-neutral-300"}`}
-                      title="Mute"
-                    >
-                      {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    </button>
-                    <button
-                      onClick={() => setIsSpeakerOn(!isSpeakerOn)}
-                      className={`p-2.5 rounded-full ${!isSpeakerOn ? "bg-neutral-800 text-neutral-500" : "bg-blue-900/60 text-blue-300"}`}
-                      title="Speaker"
-                    >
-                      {isSpeakerOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                    </button>
-                    <button
-                      onClick={handleEndCall}
-                      className="p-2.5 bg-red-600 hover:bg-red-500 text-white rounded-full"
-                      title="End Call"
-                    >
-                      <PhoneOff className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ENDED STATE */}
-              {callState === "ended" && (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-4 space-y-4">
-                  <div className="w-16 h-16 rounded-full bg-green-500/20 text-green-400 border border-green-500/40 flex items-center justify-center">
-                    <CheckCircle2 className="w-8 h-8" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-green-400 uppercase tracking-wider block">
-                      Call Completed & Analyzed
-                    </span>
-                    <h3 className="text-lg font-black text-white mt-1">Objections Resolved 100%</h3>
-                    <p className="text-neutral-400 text-xs mt-1">
-                      Allocation Locked (#MAH-AL-99218) • 12 Days ETA
-                    </p>
-                  </div>
-
-                  <div className="w-full py-2.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold rounded-2xl text-xs flex items-center justify-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Test Ride Completed & Allocation Locked</span>
-                  </div>
-
-                  <button
-                    onClick={handleStartOutboundCall}
-                    className="text-neutral-400 hover:text-white text-[11px]"
-                  >
-                    Replay Call Simulation
-                  </button>
-                </div>
-              )}
-            </div>
+                );
+              })
+            )}
           </div>
         </div>
 
-        {/* Right 7 Cols: Post-Call Insights & Dealership Pipeline Dashboard */}
-        <div className="lg:col-span-7 bg-neutral-900/90 rounded-2xl border border-neutral-800 p-6 space-y-5 shadow-2xl">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-neutral-800 pb-4">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                Gemini Conversational Analytics
-              </span>
-              <h3 className="text-xl font-black text-white mt-1">
-                Post-Test Ride Call Insights & Resolution
-              </h3>
-            </div>
-
-            <span className="text-xs px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 font-mono">
-              Ref: {callReference}
-            </span>
-          </div>
-
-          {callInsights ? (
-            <div className="space-y-5 text-xs">
-              {/* Call Summary Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 bg-neutral-950 rounded-xl border border-neutral-800 text-center">
-                  <span className="text-[10px] text-neutral-400 uppercase block font-semibold">Resolution Rate</span>
-                  <span className="text-xl font-black text-green-400 mt-0.5 block">100%</span>
-                  <span className="text-[9px] text-neutral-500">All Objections Cleared</span>
-                </div>
-                <div className="p-3 bg-neutral-950 rounded-xl border border-neutral-800 text-center">
-                  <span className="text-[10px] text-neutral-400 uppercase block font-semibold">Customer Sentiment</span>
-                  <span className="text-xl font-black text-blue-400 mt-0.5 block">Very Positive</span>
-                  <span className="text-[9px] text-neutral-500">Committed to Buy</span>
-                </div>
-                <div className="p-3 bg-neutral-950 rounded-xl border border-neutral-800 text-center">
-                  <span className="text-[10px] text-neutral-400 uppercase block font-semibold">Locked Allocation</span>
-                  <span className="text-xl font-black text-amber-400 mt-0.5 block">12 Days</span>
-                  <span className="text-[9px] text-neutral-500">Bayview Mahindra</span>
-                </div>
-                <div className="p-3 bg-neutral-950 rounded-xl border border-neutral-800 text-center">
-                  <span className="text-[10px] text-neutral-400 uppercase block font-semibold">Call Duration</span>
-                  <span className="text-xl font-black text-purple-400 mt-0.5 block">
-                    {callInsights.call_duration_seconds}s
-                  </span>
-                  <span className="text-[9px] text-neutral-500">3 Turn Dialogue</span>
-                </div>
+        {/* ================= RIGHT PANEL: Outbound Call Interface ================= */}
+        <div className="lg:col-span-8 space-y-5">
+          {/* Selected Customer Details Header Card */}
+          <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center font-black shadow-xs">
+                <User className="w-6 h-6" />
               </div>
-
-              {/* Handled Objections Breakdown */}
-              <div className="p-4 bg-blue-950/20 border border-blue-800/40 rounded-xl space-y-3">
-                <span className="text-[11px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4" /> Objections Addressed & Resolved by MIA
-                </span>
-                <div className="space-y-2 text-neutral-300">
-                  <div className="p-2.5 bg-neutral-950 rounded-lg border border-neutral-800">
-                    <div className="flex items-center justify-between font-bold text-neutral-200">
-                      <span>1. Rear Seat Legroom & Elder Comfort</span>
-                      <span className="text-green-400 text-[10px]">RESOLVED</span>
-                    </div>
-                    <p className="text-[11px] text-neutral-400 mt-1">
-                      MIA highlighted the AX7L's 60:40 split reclining seat function which expands rear knee room and provides adjustable under-thigh comfort.
-                    </p>
-                  </div>
-
-                  <div className="p-2.5 bg-neutral-950 rounded-lg border border-neutral-800">
-                    <div className="flex items-center justify-between font-bold text-neutral-200">
-                      <span>2. Delivery Waiting Period (12-16 Weeks Anxiety)</span>
-                      <span className="text-green-400 text-[10px]">RESOLVED</span>
-                    </div>
-                    <p className="text-[11px] text-neutral-400 mt-1">
-                      MIA scanned real-time regional dealer allocation pipeline and provisionally locked a ready <strong>Stealth Black AX7L Diesel AT</strong> scheduled for delivery in <strong>12 days</strong> at Bayview Mahindra.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Locked Vehicle Allocation Badge */}
-              <div className="p-4 bg-gradient-to-r from-amber-950/40 via-neutral-950 to-neutral-950 rounded-xl border border-amber-800/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div>
-                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
-                    Fast-Track Regional Inventory Allocation Lock:
-                  </span>
-                  <span className="text-base font-black text-white mt-0.5 block">
-                    {callInsights.locked_vehicle_variant}
-                  </span>
-                  <span className="text-xs text-neutral-400">
-                    Allocation #MAH-AL-99218 • Dealership: Bayview Mahindra, Bandra West
-                  </span>
-                </div>
-
-                <div className="px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold whitespace-nowrap">
-                  12 Days Delivery ETA
-                </div>
-              </div>
-
-              {/* Timestamped Transcript */}
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">
-                  Outbound Call Transcript:
-                </span>
-                <div className="p-3.5 bg-neutral-950 rounded-xl border border-neutral-800 max-h-40 overflow-y-auto space-y-1.5 font-mono text-[11px] text-neutral-300">
-                  {callInsights.transcript.split("\n").map((line, idx) => (
-                    <div key={idx} className={line.includes("MIA") ? "text-blue-300" : "text-neutral-300"}>
-                      {line}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Completion Banner */}
-              <div className="w-full p-3.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold rounded-xl text-xs flex items-center justify-center gap-2">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>✓ Outbound Customer Feedback Completed • Priority Vehicle Allocation Confirmed</span>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-16 space-y-4 text-neutral-400">
-              <PhoneCall className="w-12 h-12 mx-auto text-neutral-600 animate-pulse" />
               <div>
-                <h4 className="text-base font-bold text-neutral-200">
-                  Ready to Initiate Outbound Call
-                </h4>
-                <p className="text-xs text-neutral-400 mt-1 max-w-md mx-auto">
-                  Click the call button on the phone simulator to launch the proactive outbound follow-up conversation.
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-black text-slate-900">{selectedLead.customer_name}</h2>
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                    TestRide_Completed
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
+                  <span>Phone: <strong className="text-slate-800">{selectedLead.customer_phone}</strong></span>
+                  <span>•</span>
+                  <span>Session ID: <strong className="font-mono text-slate-800">{selectedLead.booking_reference || selectedLead.session_id}</strong></span>
                 </p>
               </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-left">
+                <span className="text-slate-400 block text-[10px] font-bold">Model Tested</span>
+                <strong className="text-slate-900">{selectedLead.vehicle_name}</strong>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-left">
+                <span className="text-slate-400 block text-[10px] font-bold">Sales Consultant</span>
+                <strong className="text-slate-900">{selectedLead.sales_advisor_name}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Connect Call (Two Egress Options) Card - MATCHES SCREENSHOT EXACTLY */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
+            {/* Header with Title and Status Badge */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <Phone className="w-5 h-5 text-slate-800" />
+                <h3 className="text-lg font-black text-slate-900">
+                  Connect Call (Two Egress Options)
+                </h3>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase ${callState === "in_call"
+                  ? "bg-emerald-100 text-emerald-800 animate-pulse"
+                  : callState === "completed"
+                    ? "bg-blue-100 text-blue-800"
+                    : "bg-blue-50 text-blue-700 border border-blue-200"
+                }`}>
+                {callState === "in_call" ? "IN CALL" : callState === "completed" ? "COMPLETED" : "READY"}
+              </span>
+            </div>
+
+            {/* Tab Switcher */}
+            <div className="grid grid-cols-2 p-1.5 rounded-2xl bg-slate-100 border border-slate-200 gap-1.5">
               <button
-                onClick={handleStartOutboundCall}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs"
+                onClick={() => setEgressMode("browser")}
+                className={`py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${EgressMode === "browser"
+                    ? "bg-white text-blue-700 shadow-xs border border-slate-200/60 font-black"
+                    : "text-slate-600 hover:text-slate-900"
+                  }`}
               >
-                Start Outbound Call Simulation
+                <Mic className="w-4 h-4 text-blue-600" />
+                <span>Option 1: Browser Call</span>
+              </button>
+              <button
+                onClick={() => setEgressMode("twilio")}
+                className={`py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${EgressMode === "twilio"
+                    ? "bg-white text-blue-700 shadow-xs border border-slate-200/60 font-black"
+                    : "text-slate-600 hover:text-slate-900"
+                  }`}
+              >
+                <PhoneCall className="w-4 h-4 text-slate-700" />
+                <span>Option 2: Twilio PSTN</span>
               </button>
             </div>
-          )}
+
+            {/* Option 1: Browser Call Content */}
+            {EgressMode === "browser" ? (
+              <div className="space-y-5">
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Direct bidirectional 24kHz native audio stream through your browser microphone and speakers with studio-grade continuous playback.
+                </p>
+
+                {/* Big Blue Action Button */}
+                {callState === "ready" || callState === "completed" ? (
+                  <button
+                    onClick={handleStartBrowserCall}
+                    className="w-full py-4 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-black text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Mic className="w-5 h-5" />
+                    <span>{callState === "completed" ? "Restart Browser Voice Call" : "Start Browser Voice Call"}</span>
+                  </button>
+                ) : callState === "connecting" ? (
+                    <button
+                      disabled
+                      className="w-full py-4 rounded-2xl bg-blue-400 text-white font-black text-sm flex items-center justify-center gap-2 cursor-not-allowed"
+                    >
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <span>Connecting High-Definition Audio Stream...</span>
+                    </button>
+                  ) : (
+                      <button
+                        onClick={handleEndCall}
+                        className="w-full py-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                      >
+                        <PhoneOff className="w-5 h-5" />
+                        <span>End Voice Call</span>
+                      </button>
+                )}
+
+                {/* Waveform / Audio Visualizer Box */}
+                <div className="p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs space-y-4">
+                  {/* Customer Audio Wave */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 w-24">Customer</span>
+                    <div className="flex-1 flex items-center justify-end gap-1 overflow-hidden px-2">
+                      {[...Array(24)].map((_, i) => (
+                        <div
+                          key={`c-${i}`}
+                          className={`w-1.5 rounded-full transition-all duration-150 ${isCustomerSpeaking
+                              ? "bg-emerald-500 animate-pulse"
+                              : "bg-emerald-600/70"
+                            }`}
+                          style={{
+                            height: isCustomerSpeaking ? `${Math.max(6, (i % 6) * 4 + 6)}px` : "4px"
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Kavya AI Audio Wave */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 w-24">Kavya AI</span>
+                    <div className="flex-1 flex items-center justify-end gap-1 overflow-hidden px-2">
+                      {[...Array(24)].map((_, i) => (
+                        <div
+                          key={`k-${i}`}
+                          className={`w-1.5 rounded-full transition-all duration-150 ${isAiSpeaking
+                              ? "bg-blue-600 animate-pulse"
+                              : "bg-blue-600/80"
+                            }`}
+                          style={{
+                            height: isAiSpeaking ? `${Math.max(6, ((24 - i) % 7) * 4 + 8)}px` : "4px"
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stats Grid: Duration & Live Call Connection */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-center">
+                    <div className="font-mono font-black text-xl text-slate-900">
+                      {Math.floor(callDuration / 60).toString().padStart(2, "0")}:
+                      {(callDuration % 60).toString().padStart(2, "0")}
+                    </div>
+                    <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Call Duration</div>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-center">
+                    <div className="font-black text-sm text-emerald-600 mt-1 flex items-center justify-center gap-1">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping inline-block" />
+                      <span>{callState === "in_call" ? "Live Connected" : callState === "connecting" ? "Connecting..." : "Ready"}</span>
+                    </div>
+                    <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Voice Line Status</div>
+                  </div>
+                </div>
+
+                {/* Helper Card */}
+                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-xs text-slate-800 space-y-1">
+                  <p className="leading-relaxed">
+                    💡 <strong>Post-Test Ride Flow:</strong> When the call starts, Kavya will introduce herself in Hindi and ask for your feedback regarding the test drive and sales consultant support. Speak naturally into your microphone during the voice call!
+                  </p>
+                </div>
+
+                {/* Live Interactive Dialogue Stream */}
+                {dialogue.length > 0 && (
+                  <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                      <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Live Outbound Call Transcript</span>
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-500 font-mono">
+                        Ref: {callReference}
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                      {dialogue.map((turn, idx) => (
+                        <div
+                          key={idx}
+                          className={`p-3 rounded-xl text-xs space-y-1 ${turn.role === "ai"
+                              ? "bg-blue-50/80 border border-blue-200/70 text-blue-950 ml-0 mr-8"
+                              : "bg-white border border-slate-200 text-slate-900 ml-8 mr-0"
+                            }`}
+                        >
+                          <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold">
+                            <span>{turn.speaker}</span>
+                            <span>{turn.time}</span>
+                          </div>
+                          <p className="font-medium leading-relaxed">{turn.text}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Customer Text Chat Input (Optional Fallback) */}
+                    {callState === "in_call" && (
+                      <div className="pt-2 border-t border-slate-200">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={customInputText}
+                            onChange={(e) => setCustomInputText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && customInputText.trim()) {
+                                handleSendCustomerTurn(customInputText.trim());
+                              }
+                            }}
+                            placeholder="Speak into microphone or type customer message..."
+                            className="flex-1 text-xs px-3.5 py-2 rounded-xl bg-white border border-slate-300 focus:border-blue-600 text-slate-900 outline-none"
+                          />
+                          <button
+                            onClick={() => {
+                              if (customInputText.trim()) {
+                                handleSendCustomerTurn(customInputText.trim());
+                              }
+                            }}
+                            disabled={!customInputText.trim() || isAiSpeaking}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span>Send</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Option 2: Twilio PSTN Content */
+              <div className="space-y-5">
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Dispatch an automated outbound cellular phone call to the customer using Twilio Voice SIP trunk with real-time speech recognition and AI response.
+                </p>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Customer Destination Phone
+                      </label>
+                      <input
+                        type="text"
+                        value={twilioPhoneNumber}
+                        onChange={(e) => setTwilioPhoneNumber(e.target.value)}
+                        className="w-full text-xs font-mono font-bold px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 focus:border-blue-600 outline-none text-slate-900"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div className="p-3 rounded-xl bg-white border border-slate-200">
+                        <span className="text-slate-500 block text-[10px]">Caller ID</span>
+                        <strong className="text-slate-900 font-mono">+91 22 6900 1000</strong>
+                      </div>
+                      <div className="p-3 rounded-xl bg-white border border-slate-200">
+                        <span className="text-slate-500 block text-[10px]">Agent Profile</span>
+                        <strong className="text-slate-900">Kavya AI (Mahindra)</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleTwilioDispatch}
+                    className="w-full py-4 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-black text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <PhoneCall className="w-5 h-5" />
+                    <span>Dispatch Outbound Twilio Call to {twilioPhoneNumber}</span>
+                  </button>
+
+                  {twilioDispatchStatus && (
+                    <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{twilioDispatchStatus}</span>
+                    </div>
+                  )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

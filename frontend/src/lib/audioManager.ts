@@ -1,67 +1,102 @@
 export class LiveAudioOutputManager {
   private audioContext: AudioContext | null = null;
-  private workletNode: AudioWorkletNode | null = null;
   private initialized = false;
+  private nextPlayTime = 0;
+  private activeSources: AudioBufferSourceNode[] = [];
 
   async initializeAudioContext(): Promise<void> {
-    if (this.initialized && this.audioContext && this.audioContext.state !== "closed") {
+    try {
+      if (!this.audioContext || this.audioContext.state === "closed") {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        this.audioContext = new AudioCtx({ sampleRate: 24000 });
+      }
       if (this.audioContext.state === "suspended") {
         await this.audioContext.resume();
       }
-      return;
-    }
-
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      this.audioContext = new AudioCtx({ sampleRate: 24000 });
-      await this.audioContext.audioWorklet.addModule("/pcm-processor.js");
-      this.workletNode = new AudioWorkletNode(this.audioContext, "pcm-processor");
-      this.workletNode.connect(this.audioContext.destination);
+      this.nextPlayTime = this.audioContext.currentTime;
       this.initialized = true;
-      console.log("LiveAudioOutputManager initialized at 24kHz studio rate.");
+      console.log("[LiveAudioOutputManager] AudioContext running at", this.audioContext.sampleRate, "Hz");
     } catch (e) {
-      console.warn("AudioWorklet initialization fallback:", e);
+      console.error("[LiveAudioOutputManager] Failed to init AudioContext:", e);
     }
   }
 
-  async playAudioChunk(base64AudioChunk: string): Promise<void> {
+  async playAudioChunk(base64AudioChunk: string, sampleRate = 24000): Promise<void> {
+    if (!base64AudioChunk || base64AudioChunk.length <= 8) return;
+
     try {
-      if (!this.initialized) {
+      if (!this.audioContext || this.audioContext.state === "closed") {
         await this.initializeAudioContext();
       }
       if (this.audioContext && this.audioContext.state === "suspended") {
         await this.audioContext.resume();
       }
-      if (!this.workletNode) return;
+      if (!this.audioContext) return;
 
       const arrayBuffer = LiveAudioOutputManager.base64ToArrayBuffer(base64AudioChunk);
       const float32Data = LiveAudioOutputManager.convertPCM16LEToFloat32(arrayBuffer);
-      this.workletNode.port.postMessage(float32Data);
+
+      if (float32Data.length === 0) return;
+
+      const audioBuffer = this.audioContext.createBuffer(1, float32Data.length, sampleRate);
+      audioBuffer.getChannelData(0).set(float32Data);
+
+      const source = this.audioContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(this.audioContext.destination);
+
+      const now = this.audioContext.currentTime;
+      const startTime = Math.max(now, this.nextPlayTime);
+      source.start(startTime);
+      this.nextPlayTime = startTime + audioBuffer.duration;
+
+      this.activeSources.push(source);
+      source.onended = () => {
+        const idx = this.activeSources.indexOf(source);
+        if (idx > -1) this.activeSources.splice(idx, 1);
+      };
     } catch (error) {
-      console.error("Error playing audio chunk:", error);
+      console.error("[LiveAudioOutputManager] Error playing chunk:", error);
     }
   }
 
   interrupt(): void {
-    if (this.workletNode) {
-      this.workletNode.port.postMessage("interrupt");
+    try {
+      for (const src of this.activeSources) {
+        try {
+          src.stop();
+          src.disconnect();
+        } catch (e) {}
+      }
+      this.activeSources = [];
+      if (this.audioContext) {
+        this.nextPlayTime = this.audioContext.currentTime;
+      }
+    } catch (e) {
+      console.warn("[LiveAudioOutputManager] Error interrupting audio:", e);
     }
   }
 
   static base64ToArrayBuffer(base64: string): ArrayBuffer {
     const binaryString = window.atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
     return bytes.buffer;
   }
 
   static convertPCM16LEToFloat32(pcmData: ArrayBuffer): Float32Array {
-    const inputArray = new Int16Array(pcmData);
-    const float32Array = new Float32Array(inputArray.length);
-    for (let i = 0; i < inputArray.length; i++) {
-      float32Array[i] = inputArray[i] / 32768;
+    if (!pcmData || pcmData.byteLength < 2) {
+      return new Float32Array(0);
+    }
+    const safeBytes = pcmData.byteLength - (pcmData.byteLength % 2);
+    const numSamples = safeBytes / 2;
+    const inputArray = new Int16Array(pcmData, 0, numSamples);
+    const float32Array = new Float32Array(numSamples);
+    for (let i = 0; i < numSamples; i++) {
+      float32Array[i] = inputArray[i] / 32768.0;
     }
     return float32Array;
   }
@@ -83,13 +118,9 @@ export class LiveVideoOutputManager {
   initMediaSource(videoElementId = "video_player"): boolean {
     if (typeof window === "undefined") return false;
     const video = document.getElementById(videoElementId) as HTMLVideoElement;
-    if (!video) {
-      return false;
-    }
+    if (!video) return false;
 
-    if (this.initialized && this.mediaSource) {
-      return true;
-    }
+    if (this.initialized && this.mediaSource) return true;
 
     video.muted = false;
 
@@ -151,18 +182,17 @@ export class LiveVideoOutputManager {
   }
 
   private processQueue(): void {
-    if (!this.initialized || !this.sourceBuffer) return;
-    if (this.sourceBuffer.updating) return;
+    if (!this.sourceBuffer || this.sourceBuffer.updating || this.chunkQueue.length === 0) {
+      return;
+    }
 
-    if (this.chunkQueue.length > 0) {
+    try {
       const chunk = this.chunkQueue.shift();
       if (chunk) {
-        try {
-          this.sourceBuffer.appendBuffer(chunk);
-        } catch (e) {
-          console.error("Error appending video buffer chunk:", e);
-        }
+        this.sourceBuffer.appendBuffer(chunk);
       }
+    } catch (e) {
+      console.error("Error appending video buffer chunk:", e);
     }
   }
 }

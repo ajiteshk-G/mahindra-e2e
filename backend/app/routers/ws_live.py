@@ -22,6 +22,24 @@ from app.models.customer import Customer
 logger = logging.getLogger("ws_live")
 router = APIRouter(tags=["Live Audio & Multimodal Chat"])
 
+KAVYA_OUTBOUND_PROMPT = """You are Kavya, the official Proactive Post-Test Drive Experience Specialist for Mahindra & Mahindra.
+You are placing an outbound phone call to the customer who recently completed a test drive.
+
+Customer Details:
+- Customer Name: {cust_name}
+- Vehicle Tested: {veh_name}
+- Senior Sales Consultant: {advisor_name}
+- Booking Reference: {lead_ref}
+
+Guidelines:
+1. Greet the customer warmly and politely in conversational Hindi/Hinglish:
+   "Namaste {cust_name} ji! Main Mahindra se Kavya baat kar rahi hoon. Aapka {veh_name} ka test drive kaisa raha? Kya hamare Sales Consultant {advisor_name} ji ne aapke sabhi sawalon ka theek se jawab diya?"
+2. Verify if the customer enjoyed the vehicle performance (FSD suspension, Panoramic Skyroof, engine power) and if the consultant provided complete support.
+3. If the customer asks about delivery timelines or financing, resolve their concerns and offer to lock their 12-day fast-track priority allocation.
+4. STRICT GUARDRAIL: Do NOT answer anything outside the Mahindra automotive ecosystem. If competitor cars (Kia, Tata, Hyundai) or unrelated topics are mentioned, politely steer back to Mahindra vehicles and their test drive.
+5. Keep your spoken responses concise, natural, polite, and under 30 words per turn for realistic phone conversation."""
+
+
 SERVICE_URL = "wss://{host}/ws/google.cloud.aiplatform.internal.LlmBidiService/BidiGenerateContent"
 
 SESSION_CACHE: Dict[str, AudioSessionManager] = {}
@@ -150,9 +168,16 @@ async def live_audio_websocket(websocket: WebSocket):
     """
     await websocket.accept()
 
+    
     query_params = dict(websocket.query_params)
-    session_id = query_params.get("session_id") or f"SESS-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
-    customer_id = query_params.get("customer_id") or "CUST-9820155432"
+    is_outbound = query_params.get("mode") == "outbound_call" or query_params.get("role") == "outbound_feedback"
+    lead_ref = query_params.get("lead_ref") or "BK-MAH-23382"
+    cust_name = query_params.get("customer_name") or "Kunal Mathuria"
+    veh_name = query_params.get("vehicle_name") or "Mahindra XUV700 AX7L"
+    advisor_name = query_params.get("advisor_name") or "Rajesh Varma"
+    session_id = query_params.get("session_id") or f"CALL-MIA-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+    customer_id = query_params.get("customer_id") or "CUST-9819657034"
+
 
     async with AsyncSessionLocal() as db:
         customer = await CustomerService.get_customer_by_id(db, customer_id)
@@ -200,15 +225,25 @@ async def live_audio_websocket(websocket: WebSocket):
             ) as bidi_ws:
                 logger.info(f"Connected to Vertex Bidi service for session {session_id}")
 
+                active_system_prompt = KAVYA_OUTBOUND_PROMPT.format(
+                    cust_name=cust_name,
+                    veh_name=veh_name,
+                    advisor_name=advisor_name,
+                    lead_ref=lead_ref
+                ) if is_outbound else KABIR_SYSTEM_PROMPT
+
+                active_voice = "Aoede" if is_outbound else (settings.AVATAR_VOICE or "orus")
+                active_modality = "AUDIO" if is_outbound else (settings.AVATAR_MODALITY or "VIDEO")
+
                 setup_msg = {
                     "setup": {
                         "model": f"projects/{used_project}/locations/{settings.VERTEX_LOCATION}/publishers/google/models/{settings.GEMINI_LIVE_MODEL}",
                         "generationConfig": {
-                            "responseModalities": [settings.AVATAR_MODALITY or "VIDEO"],
+                            "responseModalities": [active_modality],
                             "speechConfig": {
                                 "voiceConfig": {
                                     "prebuiltVoiceConfig": {
-                                        "voiceName": settings.AVATAR_VOICE or "orus"
+                                        "voiceName": active_voice
                                     }
                                 },
                                 "languageCode": "hi-IN"
@@ -220,6 +255,23 @@ async def live_audio_websocket(websocket: WebSocket):
                             "avatarName": "Jay"
                         },
                         "tools": [
+                            {
+                                "functionDeclarations": [
+                                    {
+                                        "name": "lock_priority_allocation",
+                                        "description": "Call this tool when the customer agrees to lock fast-track 12-day vehicle delivery allocation.",
+                                        "parameters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "variant": {"type": "string"},
+                                                "allocation_days": {"type": "integer"}
+                                            },
+                                            "required": ["variant"]
+                                        }
+                                    }
+                                ]
+                            }
+                        ] if is_outbound else [
                             {
                                 "functionDeclarations": [
                                     {
@@ -297,7 +349,7 @@ async def live_audio_websocket(websocket: WebSocket):
                             }
                         ],
                         "systemInstruction": {
-                            "parts": [{"text": KABIR_SYSTEM_PROMPT}]
+                            "parts": [{"text": active_system_prompt}]
                         }
                     }
                 }
@@ -308,6 +360,21 @@ async def live_audio_websocket(websocket: WebSocket):
                     init_resp = await asyncio.wait_for(bidi_ws.recv(), timeout=4.0)
                     init_data = json.loads(init_resp) if isinstance(init_resp, str) else {}
                     logger.info(f"Vertex Bidi setup complete: {init_data.get('setupComplete', True)}")
+                    
+                    # For Outbound call, send initial prompt turn to Gemini Live to begin speaking greeting
+                    if is_outbound:
+                        init_greeting_prompt = {
+                            "clientContent": {
+                                "turns": [
+                                    {
+                                        "role": "user",
+                                        "parts": [{"text": f"Greet {cust_name} warmly in spoken Hindi, introducing yourself as Kavya from Mahindra, asking how their {veh_name} test drive went with {advisor_name}."}]
+                                    }
+                                ],
+                                "turnComplete": True
+                            }
+                        }
+                        await bidi_ws.send(json.dumps(init_greeting_prompt))
                 except Exception as e:
                     logger.debug(f"Vertex setup response notice: {e}")
 
@@ -320,38 +387,42 @@ async def live_audio_websocket(websocket: WebSocket):
                                 break
                             if "text" in data and data["text"]:
                                 payload = json.loads(data["text"])
-                                msg_type = payload.get("type", "USER_CHAT")
-                                if msg_type == "END_CALL" or msg_type == "STOP_SESSION":
-                                    logger.info(f"Client requested end of call for session {session_id}")
-                                    break
-                                elif msg_type == "START_SESSION":
-                                    cust_name = payload.get("customer_name") or customer.name or "there"
-                                    greeting_turn = {
-                                        "clientContent": {
-                                            "turns": [
-                                                {
-                                                    "role": "user",
-                                                    "parts": [{"text": f"Please give a warm, dynamic, non-static spoken greeting to {cust_name} as Kabir, introducing yourself as Mahindra's AI Showroom Specialist, welcoming them to the virtual showroom in {session_mgr.language}, and asking which SUV or electric vehicle they'd like to check out today."}]
-                                                }
-                                            ],
-                                            "turnComplete": True
+                                if "realtimeInput" in payload or "clientContent" in payload or "toolResponse" in payload:
+                                    await bidi_ws.send(data["text"])
+                                else:
+                                    msg_type = payload.get("type", "USER_CHAT")
+                                    if msg_type == "END_CALL" or msg_type == "STOP_SESSION":
+                                        logger.info(f"Client requested end of call for session {session_id}")
+                                        break
+                                    elif msg_type == "START_SESSION":
+                                        cust_name = payload.get("customer_name") or customer.name or "there"
+                                        greeting_turn = {
+                                            "clientContent": {
+                                                "turns": [
+                                                    {
+                                                        "role": "user",
+                                                        "parts": [{"text": f"Please give a warm, dynamic, non-static spoken greeting to {cust_name} as Kabir, introducing yourself as Mahindra's AI Showroom Specialist, welcoming them to the virtual showroom in {session_mgr.language}, and asking which SUV or electric vehicle they'd like to check out today."}]
+                                                    }
+                                                ],
+                                                "turnComplete": True
+                                            }
                                         }
-                                    }
-                                    await bidi_ws.send(json.dumps(greeting_turn))
-                                elif msg_type == "USER_CHAT":
-                                    user_text = payload.get("text", "")
-                                    bidi_turn = {
-                                        "clientContent": {
-                                            "turns": [
-                                                {
-                                                    "role": "user",
-                                                    "parts": [{"text": user_text}]
+                                        await bidi_ws.send(json.dumps(greeting_turn))
+                                    elif msg_type == "USER_CHAT":
+                                        user_text = payload.get("text", "")
+                                        if user_text:
+                                            bidi_turn = {
+                                                "clientContent": {
+                                                    "turns": [
+                                                        {
+                                                            "role": "user",
+                                                            "parts": [{"text": user_text}]
+                                                        }
+                                                    ],
+                                                    "turnComplete": True
                                                 }
-                                            ],
-                                            "turnComplete": True
-                                        }
-                                    }
-                                    await bidi_ws.send(json.dumps(bidi_turn))
+                                            }
+                                            await bidi_ws.send(json.dumps(bidi_turn))
                             elif "bytes" in data and data["bytes"]:
                                 import base64
                                 pcm_b64 = base64.b64encode(data["bytes"]).decode("utf-8")

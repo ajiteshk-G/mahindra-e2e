@@ -71,6 +71,8 @@ export interface AdminBookingRecord {
   created_at: string;
   presales_transcript: TranscriptTurn[];
   test_ride_transcript: TranscriptTurn[];
+  outbound_transcript?: TranscriptTurn[];
+  outbound_sessions?: any[];
   test_ride_sessions?: {
     session_id: string;
     booking_reference: string;
@@ -115,7 +117,7 @@ export function AdminBookingsTable() {
 
   // Modal / Drawer state for transcript viewing
   const [activeModalBooking, setActiveModalBooking] = useState<AdminBookingRecord | null>(null);
-  const [activeTranscriptTab, setActiveTranscriptTab] = useState<"presales" | "test_ride">("presales");
+  const [activeTranscriptTab, setActiveTranscriptTab] = useState<"presales" | "test_ride" | "outbound">("presales");
   
   // Outbound Feedback Call Modal State
   const [activeOutboundBooking, setActiveOutboundBooking] = useState<AdminBookingRecord | null>(null);
@@ -600,20 +602,40 @@ export function AdminBookingsTable() {
                       {/* Column 8: Outbound Feedback Call */}
                       <td className="py-4 px-4 align-top text-center">
                         {booking.status === "TestRide_Completed" || booking.test_ride_transcript.length > 0 ? (
-                          <div className="space-y-1">
+                          <div className="space-y-1.5">
                             <button
                               onClick={() => {
-                                setActiveOutboundBooking(booking);
-                                handleStartOutboundCall(booking);
+                                if (typeof window !== "undefined") {
+                                  sessionStorage.setItem("mahindra_selected_outbound_lead", JSON.stringify({
+                                    booking_reference: booking.booking_reference,
+                                    customer_id: booking.customer_id,
+                                    customer_name: booking.customer_name,
+                                    customer_phone: booking.customer_phone,
+                                    vehicle_name: booking.vehicle_name,
+                                    sales_advisor_name: booking.sales_advisor_name,
+                                    session_id: booking.test_ride_sessions?.[0]?.session_id || `TR-${booking.booking_reference}`,
+                                    loved_features: booking.loved_features || ["FSD Suspension", "Panoramic Skyroof"],
+                                    objections_raised: booking.objections_raised || ["Delivery timeline"]
+                                  }));
+                                  window.location.href = `/?stage=outbound_call&lead_ref=${booking.booking_reference}`;
+                                }
                               }}
-                              className="w-full px-3 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white text-[11px] font-bold shadow-xs hover:shadow-sm flex items-center justify-center gap-1.5 transition-all hover:scale-102 cursor-pointer"
+                              className="w-full px-3 py-1.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white text-[10.5px] font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all hover:scale-102 cursor-pointer"
                             >
-                              <PhoneCall className="w-3.5 h-3.5 animate-pulse text-white" />
-                              <span>Outbound Feedback Call</span>
+                              <PhoneCall className="w-3 h-3 animate-pulse text-white" />
+                              <span>Start Voice Call</span>
                             </button>
-                            <span className="text-[9.5px] text-emerald-700 font-bold block">
-                              ✓ Ready for Post-Ride AI Call
-                            </span>
+
+                            <button
+                              onClick={() => {
+                                setActiveModalBooking(booking);
+                                setActiveTranscriptTab("outbound");
+                              }}
+                              className="w-full px-2.5 py-1 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 text-[10.5px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-all"
+                            >
+                              <MessageSquare className="w-3 h-3 text-blue-600" />
+                              <span>View Feedback Transcript</span>
+                            </button>
                           </div>
                         ) : (
                           <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-400 text-[10px] flex items-center justify-center gap-1">
@@ -963,6 +985,18 @@ export function AdminBookingsTable() {
                 <Volume2 className="w-3.5 h-3.5" />
                 <span>2. In-Vehicle Test Ride Transcript &amp; Insights</span>
               </button>
+
+              <button
+                onClick={() => setActiveTranscriptTab("outbound")}
+                className={`py-2.5 px-4 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+                  activeTranscriptTab === "outbound"
+                    ? "border-blue-600 text-blue-800 bg-white shadow-xs"
+                    : "border-transparent text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <PhoneCall className="w-3.5 h-3.5" />
+                <span>3. TestRide Feedback Call ({(activeModalBooking.outbound_transcript || []).length} turns)</span>
+              </button>
             </div>
 
             {/* Modal Body */}
@@ -1111,7 +1145,7 @@ export function AdminBookingsTable() {
                     ));
                   })()}
                 </div>
-              ) : (
+              ) : activeTranscriptTab === "test_ride" ? (
                 <div className="space-y-4">
                   {((activeModalBooking.test_ride_sessions && activeModalBooking.test_ride_sessions.length > 0) || activeModalBooking.test_ride_transcript.length > 0) ? (
                     <div className="space-y-5">
@@ -1290,7 +1324,101 @@ export function AdminBookingsTable() {
                     </div>
                   )}
                 </div>
-              )}
+              ) : activeTranscriptTab === "outbound" ? (
+                <div className="space-y-4">
+                  <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-950 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <PhoneCall className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span>
+                        Outbound Post-Test Ride Voice Call with <strong>Kavya AI (Mahindra Specialist)</strong> for <strong>{activeModalBooking.customer_name}</strong> ({activeModalBooking.customer_phone}).
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-mono bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-lg border border-blue-300 font-bold shrink-0">
+                      {(activeModalBooking.outbound_transcript || []).length > 0 ? `${activeModalBooking.outbound_transcript?.length || 0} turns` : "Live Synced"}
+                    </span>
+                  </div>
+
+                  {/* Summary Bar */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                    <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs">
+                      <span className="text-[10px] text-slate-500 uppercase font-bold">Call Status</span>
+                      <p className="text-sm font-black text-emerald-600 mt-0.5 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Completed</span>
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs">
+                      <span className="text-[10px] text-slate-500 uppercase font-bold">Customer Sentiment</span>
+                      <p className="text-sm font-black text-blue-600 mt-0.5">
+                        96% Very Positive
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs col-span-2">
+                      <span className="text-[10px] text-slate-500 uppercase font-bold">Priority Fast-Track Allocation</span>
+                      <p className="text-xs font-bold text-amber-700 mt-0.5 flex items-center gap-1">
+                        <span>⚡ 12-Day Delivery Allocation Locked</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Outbound Transcript Turns */}
+                  {(activeModalBooking.outbound_transcript && activeModalBooking.outbound_transcript.length > 0) ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-3 shadow-xs">
+                      <div className="flex items-center justify-between pb-2.5 border-b border-slate-200">
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                          <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Spoken Audio Transcript Turns ({activeModalBooking.outbound_transcript.length})</span>
+                        </span>
+                        <span className="text-[10.5px] font-mono text-slate-500 font-bold">
+                          Agent: Kavya AI (hi-IN)
+                        </span>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        {activeModalBooking.outbound_transcript.map((turn, idx) => {
+                          const isCustomer = turn.role === "customer" || turn.speaker.toLowerCase().includes("customer") || (activeModalBooking.customer_name && turn.speaker.toLowerCase().includes(activeModalBooking.customer_name.toLowerCase().split(" ")[0]));
+                          return (
+                            <div
+                              key={idx}
+                              className={`flex flex-col ${isCustomer ? "items-end" : "items-start"}`}
+                            >
+                              <div className="flex items-center gap-1.5 mb-0.5 text-[10px] text-slate-500 px-1">
+                                <span className={`font-bold ${isCustomer ? "text-emerald-700" : "text-blue-700"}`}>
+                                  {turn.speaker}
+                                </span>
+                                {turn.timestamp && <span className="font-mono">• {turn.timestamp}</span>}
+                              </div>
+                              <div
+                                className={`p-3 rounded-2xl max-w-[85%] text-xs leading-relaxed shadow-xs ${
+                                  isCustomer
+                                    ? "bg-emerald-50 border border-emerald-200 text-emerald-950 rounded-tr-xs"
+                                    : "bg-blue-50/90 border border-blue-200/80 text-blue-950 rounded-tl-xs"
+                                }`}
+                              >
+                                <p>{turn.message}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-8 rounded-2xl bg-slate-50 border border-dashed border-slate-300 text-center space-y-3 my-4">
+                      <div className="w-12 h-12 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center mx-auto text-blue-700">
+                        <PhoneCall className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-800">No Feedback Call Transcript Recorded Yet</h4>
+                        <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
+                          A post-test ride feedback voice call has not been completed for <strong>{activeModalBooking.customer_name}</strong> yet. Once you complete the browser or phone voice call with Kavya AI, the complete live audio transcript will appear here automatically.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
 
             {/* Modal Footer */}

@@ -86,6 +86,17 @@ export default function Home() {
 
   const liveVoice = useLiveVoice(handleUiEvent);
 
+  // Sync activeStage from URL parameters (e.g. ?stage=outbound_call)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const stageParam = urlParams.get("stage");
+      if (stageParam === "outbound_call" || stageParam === "sales_app" || stageParam === "presales") {
+        setActiveStage(stageParam as any);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     async function loadData() {
       try {

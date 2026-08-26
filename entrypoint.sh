@@ -9,7 +9,7 @@ BACKEND_PID=$!
 
 echo "Starting Next.js Frontend on 0.0.0.0:${PORT}..."
 cd /app/frontend
-npx next start -H 0.0.0.0 -p ${PORT} &
+npm run start -- -p ${PORT} &
 FRONTEND_PID=$!
 
 wait -n $BACKEND_PID $FRONTEND_PID

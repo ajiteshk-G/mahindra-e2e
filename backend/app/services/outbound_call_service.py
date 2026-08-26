@@ -68,7 +68,7 @@ class OutboundCallService:
             phone_number=req.phone_number,
             call_status="IN_PROGRESS",
             call_duration_seconds=0,
-            transcript=f'[00:02] MIA: "{initial_greeting}"',
+            transcript=None,
             objection_resolution_status="100% RESOLVED (Test Drive Feedback & Stock Lock)",
             customer_sentiment="POSITIVE",
             customer_decision="EVALUATING",

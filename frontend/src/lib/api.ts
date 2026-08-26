@@ -229,3 +229,48 @@ export async function saveFullSessionTranscript(payload: {
     return null;
   }
 }
+
+
+export async function fetchAdminBookings(params?: { city?: string; vehicle_id?: string; status?: string; search?: string }) {
+  try {
+    const q = new URLSearchParams();
+    if (params?.city) q.set("city", params.city);
+    if (params?.vehicle_id) q.set("vehicle_id", params.vehicle_id);
+    if (params?.status) q.set("status", params.status);
+    if (params?.search) q.set("search", params.search);
+    const res = await fetch(`${API_BASE}/admin/bookings?${q.toString()}`);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (err) {
+    return [];
+  }
+}
+
+export async function saveOutboundCallTranscript(payload: {
+  call_reference: string;
+  booking_reference?: string;
+  customer_id?: string;
+  phone_number?: string;
+  customer_name?: string;
+  vehicle_name?: string;
+  duration_seconds?: number;
+  turns: Array<{
+    speaker: string;
+    role?: string;
+    text?: string;
+    message?: string;
+    time?: string;
+  }>;
+}) {
+  try {
+    const res = await fetch(`${API_BASE}/outbound/save-call-transcript`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  } catch (err) {
+    console.debug("Failed to save outbound transcript:", err);
+    return null;
+  }
+}

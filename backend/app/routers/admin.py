@@ -9,7 +9,7 @@ from sqlalchemy import desc
 from app.database import get_db
 from app.models.booking import TestDriveBooking, TestDriveSlot
 from app.models.customer import Customer, InteractionLog, ConversationSession
-from app.models.sales_ride import TestRideRecording
+from app.models.sales_ride import TestRideRecording, OutboundCallLog
 from app.models.dealership import Dealership
 from app.services.catalog_service import CatalogService
 from app.services.customer_service import clean_phone
@@ -180,6 +180,65 @@ async def get_admin_bookings(
                     "created_at": tr_rec.created_at.strftime("%Y-%m-%d %H:%M:%S") if tr_rec.created_at else ""
                 })
 
+        
+        # C. Fetch Outbound Feedback Call Transcripts (OutboundCallLog)
+        outbound_turns = []
+        outbound_sessions = []
+        if cust_id:
+            out_stmt = (
+                select(OutboundCallLog)
+                .where(OutboundCallLog.customer_id == cust_id)
+                .order_by(desc(OutboundCallLog.created_at))
+            )
+            out_res = await db.execute(out_stmt)
+            all_out_recs = out_res.scalars().all()
+            for out_rec in all_out_recs:
+                sess_turns = []
+                if out_rec.transcript and out_rec.transcript.strip():
+                    import re
+                    for line in out_rec.transcript.strip().split("\n"):
+                        line = line.strip()
+                        if not line:
+                            continue
+                        m = re.match(r'^(?:\[([0-9:]+)\]\s*)?([^:]+):\s*"?([^"]*)"?$', line)
+                        if m:
+                            tm_tag, spk, msg = m.group(1), m.group(2).strip(), m.group(3).strip()
+                            is_cust = "customer" in spk.lower() or cust_name.lower() in spk.lower()
+                            turn_dict = {
+                                "speaker": spk,
+                                "role": "customer" if is_cust else "kavya_ai",
+                                "message": msg,
+                                "timestamp": tm_tag or (out_rec.created_at.strftime("%I:%M %p, %d %b") if out_rec.created_at else "")
+                            }
+                            sess_turns.append(turn_dict)
+                        elif ":" in line:
+                            parts = line.split(":", 1)
+                            spk = parts[0].strip()
+                            msg = parts[1].strip().strip('"')
+                            is_cust = "customer" in spk.lower() or cust_name.lower() in spk.lower()
+                            turn_dict = {
+                                "speaker": spk,
+                                "role": "customer" if is_cust else "kavya_ai",
+                                "message": msg,
+                                "timestamp": out_rec.created_at.strftime("%I:%M %p, %d %b") if out_rec.created_at else ""
+                            }
+                            sess_turns.append(turn_dict)
+
+                if sess_turns and not outbound_turns:
+                    outbound_turns = sess_turns
+
+                outbound_sessions.append({
+                    "call_reference": out_rec.call_reference,
+                    "phone_number": out_rec.phone_number,
+                    "agent_name": out_rec.agent_name,
+                    "call_status": out_rec.call_status,
+                    "call_duration_seconds": out_rec.call_duration_seconds,
+                    "sentiment": out_rec.customer_sentiment,
+                    "decision": out_rec.customer_decision,
+                    "turns": sess_turns,
+                    "created_at": out_rec.created_at.strftime("%Y-%m-%d %H:%M:%S") if out_rec.created_at else ""
+                })
+
         # Vehicle display name
         v_info = CatalogService.get_vehicle_by_id(b.vehicle_id)
         veh_name = v_info.name if v_info else b.vehicle_id.replace("_", " ").title()
@@ -208,6 +267,8 @@ async def get_admin_bookings(
             # Dual Transcripts
             "presales_transcript": presales_turns,
             "test_ride_transcript": test_ride_turns,
+            "outbound_transcript": outbound_turns,
+            "outbound_sessions": outbound_sessions,
             # AI Insights
             "sentiment_score": sentiment_score,
             "purchase_intent": purchase_intent,
