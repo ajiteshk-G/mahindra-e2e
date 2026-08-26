@@ -3,7 +3,6 @@ from app.models.booking import TestDriveBooking, TestDriveSlot, PublicHoliday, S
 from app.models.dealership import Dealership
 from app.models.claim import InsuranceClaim
 from app.models.sales_ride import TestRideRecording, OutboundCallLog
-from app.models.financing import FinancingApplication
 
 __all__ = [
     "Customer",
@@ -15,6 +14,5 @@ __all__ = [
     "Dealership",
     "InsuranceClaim",
     "TestRideRecording",
-    "OutboundCallLog",
-    "FinancingApplication"
+    "OutboundCallLog"
 ]

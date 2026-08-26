@@ -10,7 +10,6 @@ interface VehicleCarouselProps {
   onSelectVehicle: (id: string) => void;
   onOpenTestDrive: (vehicle: VehicleItem) => void;
   onOpenCompare: (vehicle: VehicleItem) => void;
-  onOpenFinancing: (vehicle: VehicleItem) => void;
 }
 
 export function VehicleCarousel({
@@ -19,7 +18,6 @@ export function VehicleCarousel({
   onSelectVehicle,
   onOpenTestDrive,
   onOpenCompare,
-  onOpenFinancing
 }: VehicleCarouselProps) {
   const [filterCategory, setFilterCategory] = useState<string>("ALL");
 
@@ -151,15 +149,7 @@ export function VehicleCarousel({
                     Compare
                   </button>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenFinancing(vehicle);
-                    }}
-                    className="bg-mahindra-charcoal hover:bg-mahindra-border text-amber-300 font-medium py-1.5 rounded-lg border border-mahindra-border flex items-center justify-center gap-1 transition-all"
-                  >
-                    EMI/KYC
-                  </button>
+
                 </div>
               </div>
             </div>

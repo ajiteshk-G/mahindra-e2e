@@ -7,7 +7,6 @@ import {
   Sparkles,
   Smartphone,
   PhoneCall,
-  CreditCard,
   Zap,
   UserCheck,
   MessageSquare,
@@ -16,8 +15,8 @@ import {
 
 interface HeaderProps {
   profile: CustomerProfile | null;
-  activeStage: "presales" | "sales_app" | "outbound_call" | "financing";
-  onSelectStage: (stage: "presales" | "sales_app" | "outbound_call" | "financing") => void;
+  activeStage: "presales" | "sales_app" | "outbound_call";
+  onSelectStage: (stage: "presales" | "sales_app" | "outbound_call") => void;
   onOpenProfile: () => void;
   onOpenLeadModal?: () => void;
   onOpenAvatar?: () => void;
@@ -34,8 +33,7 @@ export function Header({
   const stages = [
     { id: "presales" as const, label: "1. Pre-Sales Showroom", icon: Sparkles },
     { id: "sales_app" as const, label: "2. Sales Mobile App", icon: Smartphone },
-    { id: "outbound_call" as const, label: "3. Outbound Call", icon: PhoneCall },
-    { id: "financing" as const, label: "4. Loan & KYC", icon: CreditCard }
+    { id: "outbound_call" as const, label: "3. Outbound Call", icon: PhoneCall }
   ];
 
   return (

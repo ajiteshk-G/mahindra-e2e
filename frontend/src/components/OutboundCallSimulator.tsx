@@ -27,13 +27,11 @@ import { triggerOutboundCall, sendOutboundDialogueTurn, fetchOutboundCallInsight
 interface OutboundCallSimulatorProps {
   profile: CustomerProfile | null;
   testRideInsights: TestRideInsightResponse | null;
-  onProceedToFinancing: () => void;
 }
 
 export function OutboundCallSimulator({
   profile,
-  testRideInsights,
-  onProceedToFinancing
+  testRideInsights
 }: OutboundCallSimulatorProps) {
   const [callState, setCallState] = useState<"idle" | "ringing" | "connected" | "ended">("idle");
   const [callReference, setCallReference] = useState<string>("CALL-MIA-2026-9901");
@@ -241,13 +239,10 @@ export function OutboundCallSimulator({
         </div>
 
         {callInsights && (
-          <button
-            onClick={onProceedToFinancing}
-            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs md:text-sm font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-red-900/40 flex items-center gap-2"
-          >
-            <span>Proceed to Stage 4: Financing</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+          <div className="bg-emerald-600/20 border border-emerald-500/40 text-emerald-400 text-xs md:text-sm font-bold px-4 py-2.5 rounded-xl flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4" />
+            <span>Allocation Provisionally Confirmed</span>
+          </div>
         )}
       </div>
 
@@ -582,15 +577,11 @@ export function OutboundCallSimulator({
                 </div>
               </div>
 
-              {/* Next Stage Button */}
-              <button
-                onClick={onProceedToFinancing}
-                className="w-full py-3.5 bg-gradient-to-r from-red-600 via-red-500 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-xl shadow-red-950/60"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>Advance to Stage 4: 8.15% Loan Financing & Document Upload</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+              {/* Completion Banner */}
+              <div className="w-full p-3.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold rounded-xl text-xs flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>✓ Outbound Customer Feedback Completed • Priority Vehicle Allocation Confirmed</span>
+              </div>
             </div>
           ) : (
             <div className="text-center py-16 space-y-4 text-neutral-400">

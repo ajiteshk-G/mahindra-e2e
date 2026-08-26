@@ -46,14 +46,6 @@ export interface CustomerProfile {
   interested_vehicle_id: string;
   interested_variant: string;
   budget_range: string;
-  pan_number?: string;
-  aadhaar_masked?: string;
-  kyc_status: "PENDING" | "VERIFIED" | "REJECTED";
-  kyc_extracted_data?: Record<string, any>;
-  loan_preapproval_amount: number;
-  loan_interest_rate: string;
-  voice_consent_hash?: string;
-  loan_status: string;
   owned_vin?: string;
   owned_vehicle_name?: string;
   registration_number?: string;
@@ -61,8 +53,6 @@ export interface CustomerProfile {
   insurance_policy_number?: string;
   insurance_type?: string;
 }
-
-
 
 // Stage 2: Sales Mobile App & Test Ride Insights
 export interface TestRideLeadItem {
@@ -112,6 +102,7 @@ export interface OutboundDialogueTurnResponse {
   call_reference: string;
   speaker: string;
   agent_message: string;
+  ai_reply?: string;
   audio_tts_url?: string;
   is_call_finished: boolean;
   action_item?: string;
@@ -135,73 +126,4 @@ export interface OutboundCallInsightsResponse {
   locked_allocation_days: number;
   next_step: string;
   created_at: string;
-}
-
-// Stage 4: Financing & Document KYC
-export interface AmortizationScheduleItem {
-  month: number;
-  year: number;
-  emi: number;
-  principal_paid: number;
-  interest_paid: number;
-  outstanding_balance: number;
-}
-
-export interface EMICalculationResponse {
-  vehicle_id: string;
-  variant: string;
-  ex_showroom_price: number;
-  rto_registration: number;
-  insurance_comprehensive: number;
-  other_charges: number;
-  on_road_price: number;
-  down_payment: number;
-  loan_amount: number;
-  tenure_months: number;
-  interest_rate_annual: number;
-  monthly_emi: number;
-  total_interest: number;
-  total_payable: number;
-  amortization_schedule: AmortizationScheduleItem[];
-}
-
-export interface DocumentExtractedResponse {
-  document_type: string;
-  verification_status: string;
-  confidence_score: number;
-  extracted_fields: Record<string, any>;
-  income_metrics?: Record<string, any>;
-  created_at: string;
-}
-
-export interface VoiceBiometricConsentResponse {
-  customer_id: string;
-  consent_status: string;
-  biometric_hash: string;
-  loan_amount: number;
-  sanction_id: string;
-  sanction_date: string;
-  message: string;
-}
-
-export interface SanctionLetterResponse {
-  sanction_id: string;
-  application_id: string;
-  customer_id: string;
-  customer_name: string;
-  phone: string;
-  email: string;
-  vehicle_name: string;
-  variant: string;
-  on_road_price: number;
-  down_payment: number;
-  sanctioned_loan_amount: number;
-  tenure_months: number;
-  interest_rate_annual: number;
-  monthly_emi: number;
-  lender_name: string;
-  special_benefits: string[];
-  kyc_summary: Record<string, any>;
-  sanction_date: string;
-  status: string;
 }

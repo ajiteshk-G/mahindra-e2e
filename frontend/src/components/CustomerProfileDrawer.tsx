@@ -90,7 +90,7 @@ export function CustomerProfileDrawer({
                     : "bg-mahindra-dark border-mahindra-border text-gray-400"
                 }`}
               >
-                2. Showroom & KYC
+                2. Test Ride Completed
               </button>
 
               <button
@@ -101,36 +101,12 @@ export function CustomerProfileDrawer({
                     : "bg-mahindra-dark border-mahindra-border text-gray-400"
                 }`}
               >
-                3. Completed Vehicle Delivery
+                3. Post-Ride Feedback Call
               </button>
             </div>
           </div>
 
-          {/* KYC & Financial Persistence */}
-          <div className="bg-mahindra-dark p-4 rounded-xl border border-mahindra-border space-y-2.5">
-            <div className="font-bold text-white flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              Verified KYC & Loan Credentials
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px]">
-              <div>
-                <span className="text-gray-400">PAN Number:</span>
-                <div className="font-mono text-white font-semibold">{profile.pan_number || "ABCPS1234K"}</div>
-              </div>
-              <div>
-                <span className="text-gray-400">Aadhaar:</span>
-                <div className="font-mono text-white font-semibold">{profile.aadhaar_masked || "XXXX-8921"}</div>
-              </div>
-              <div>
-                <span className="text-gray-400">Loan Status:</span>
-                <div className="text-emerald-400 font-semibold">{profile.loan_status}</div>
-              </div>
-              <div>
-                <span className="text-gray-400">Sanctioned:</span>
-                <div className="text-white font-semibold">₹{(profile.loan_preapproval_amount || 1850000).toLocaleString()}</div>
-              </div>
-            </div>
-          </div>
+
 
           {/* Owned Vehicle Record */}
           <div className="bg-mahindra-dark p-4 rounded-xl border border-mahindra-border space-y-2.5">

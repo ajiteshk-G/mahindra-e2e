@@ -5,7 +5,6 @@ import { Header } from "@/components/Header";
 import { PreSalesShowroom } from "@/components/PreSalesShowroom";
 import { SalesMobileApp } from "@/components/SalesMobileApp";
 import { OutboundCallSimulator } from "@/components/OutboundCallSimulator";
-import { FinancingDocUpload } from "@/components/FinancingDocUpload";
 import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
 import { CustomerLeadModal } from "@/components/CustomerLeadModal";
 import { ChatAvatarPanel } from "@/components/ChatAvatarPanel";
@@ -27,7 +26,7 @@ export default function Home() {
 
   // Active Omnichannel Stage
   const [activeStage, setActiveStage] = useState<
-    "presales" | "sales_app" | "outbound_call" | "financing"
+    "presales" | "sales_app" | "outbound_call"
   >("presales");
 
   // Selected vehicle & insights state
@@ -117,10 +116,6 @@ export default function Home() {
       interested_vehicle_id: selectedVehicleId,
       interested_variant: "AX7L Diesel AT 4x4",
       budget_range: "₹18 Lakh - ₹25 Lakh",
-      kyc_status: "PENDING",
-      loan_preapproval_amount: 1850000,
-      loan_interest_rate: "8.15%",
-      loan_status: "NOT_APPLIED",
       odometer_km: 9820
     });
     setActiveStage("presales");
@@ -189,19 +184,6 @@ export default function Home() {
           <OutboundCallSimulator
             profile={profile}
             testRideInsights={testRideInsights}
-            onProceedToFinancing={() => setActiveStage("financing")}
-          />
-        )}
-
-        {/* Stage 4: 8.15% Car Loan Financing & Document KYC Upload */}
-        {activeStage === "financing" && (
-          <FinancingDocUpload
-            vehicles={vehicles}
-            profile={profile}
-            selectedVehicleId={selectedVehicleId}
-            onRefreshProfile={() => {
-              if (profile?.phone) loadProfile(profile.phone);
-            }}
           />
         )}
 

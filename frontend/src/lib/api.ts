@@ -181,48 +181,6 @@ export async function fetchOutboundCallInsights(callReference: string) {
   return res.json();
 }
 
-// Stage 4: Financing & Document KYC
-export async function calculateEMI(payload: any) {
-  const res = await fetch(`${API_BASE}/financing/calculate-emi`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  return res.json();
-}
-
-export async function uploadKYCDocument(payload: any) {
-  const res = await fetch(`${API_BASE}/financing/upload-document`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  return res.json();
-}
-
-export async function recordVoiceConsent(payload: any) {
-  const res = await fetch(`${API_BASE}/financing/voice-consent`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  return res.json();
-}
-
-export async function fetchSanctionLetter(customerId = "CUST-9820155432") {
-  const res = await fetch(`${API_BASE}/financing/sanction-letter/${customerId}`);
-  return res.json();
-}
-
-// Aliases for modals
-export async function scanKYCDocument(payload: any) {
-  return uploadKYCDocument(payload);
-}
-
-export async function submitVoiceConsent(payload: any) {
-  return recordVoiceConsent(payload);
-}
-
 // Diagnostics & Claims
 export async function assessDamage(payload: any) {
   const res = await fetch(`${API_BASE}/diagnostics/assess-damage`, {

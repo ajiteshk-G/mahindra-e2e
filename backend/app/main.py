@@ -9,11 +9,9 @@ from app.routers import (
     catalog_router,
     customer_router,
     bookings_router,
-    kyc_router,
     diagnostics_router,
     sales_router,
     outbound_router,
-    financing_router,
     admin_router,
     ws_router
 )
@@ -73,11 +71,9 @@ app.include_router(health_router, prefix=settings.API_V1_STR)
 app.include_router(catalog_router, prefix=settings.API_V1_STR)
 app.include_router(customer_router, prefix=settings.API_V1_STR)
 app.include_router(bookings_router, prefix=settings.API_V1_STR)
-app.include_router(kyc_router, prefix=settings.API_V1_STR)
 app.include_router(diagnostics_router, prefix=settings.API_V1_STR)
 app.include_router(sales_router, prefix=settings.API_V1_STR)
 app.include_router(outbound_router, prefix=settings.API_V1_STR)
-app.include_router(financing_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)
 app.include_router(ws_router)
 
@@ -90,8 +86,7 @@ async def root():
         "stages": [
             "1. Pre-sales Live Avatar Virtual Showroom (mahindra-car-live-chat)",
             "2. Sales Mobile App & Test Ride Recording (GCS Audio + AI Insights)",
-            "3. Proactive Post-Ride Outbound Voice Call & Insights",
-            "4. Instant Financing, EMI Calculator & Document KYC Upload"
+            "3. Proactive Post-Ride Outbound Voice Call & Insights"
         ],
         "live_websocket": "/ws/live-audio"
     }

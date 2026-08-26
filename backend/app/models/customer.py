@@ -54,7 +54,6 @@ class Customer(Base):
     claims = relationship("InsuranceClaim", back_populates="customer", cascade="all, delete-orphan")
     test_ride_recordings = relationship("TestRideRecording", back_populates="customer", cascade="all, delete-orphan")
     outbound_calls = relationship("OutboundCallLog", back_populates="customer", cascade="all, delete-orphan")
-    financing_applications = relationship("FinancingApplication", back_populates="customer", cascade="all, delete-orphan")
 
 class ConversationSession(Base):
     __tablename__ = "conversation_sessions"
