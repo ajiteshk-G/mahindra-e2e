@@ -204,7 +204,7 @@ async def live_audio_websocket(websocket: WebSocket):
                     "setup": {
                         "model": f"projects/{used_project}/locations/{settings.VERTEX_LOCATION}/publishers/google/models/{settings.GEMINI_LIVE_MODEL}",
                         "generationConfig": {
-                            "responseModalities": ["VIDEO"],
+                            "responseModalities": [settings.AVATAR_MODALITY or "VIDEO"],
                             "speechConfig": {
                                 "voiceConfig": {
                                     "prebuiltVoiceConfig": {
@@ -513,7 +513,27 @@ async def live_audio_websocket(websocket: WebSocket):
                     }))
                 elif msg_type == "USER_CHAT":
                     user_text = payload.get("text", "")
+                    async with AsyncSessionLocal() as db:
+                        await CustomerService.log_interaction(
+                            db,
+                            customer_id_str=customer.customer_id,
+                            speaker="customer",
+                            message=user_text,
+                            channel="VOICE_LIVE",
+                            session_id_str=session_id
+                        )
                     result = await session_mgr.process_user_text_or_intent(user_text, lambda ev: None)
+                    async with AsyncSessionLocal() as db:
+                        await CustomerService.log_interaction(
+                            db,
+                            customer_id_str=customer.customer_id,
+                            speaker="mia",
+                            message=result["message"],
+                            channel="VOICE_LIVE",
+                            session_id_str=session_id,
+                            intent=result.get("tool_call"),
+                            tool=result.get("tool_call")
+                        )
                     if result.get("checklist"):
                         async with AsyncSessionLocal() as db:
                             from app.services.checklist_service import ChecklistService

@@ -8,6 +8,7 @@ from app.schemas.customer import (
     CustomerIdentifyRequest,
     CustomerIdentifyResponse,
     SaveTranscriptTurnRequest,
+    SaveFullSessionTranscriptRequest,
     InteractionLogSchema,
     ConversationSessionSchema
 )
@@ -100,3 +101,19 @@ async def update_customer(req: CustomerProfileUpdate, customer_id: str = "CUST-9
     await db.commit()
     await db.refresh(customer)
     return customer
+
+@router.post("/save-full-transcript")
+async def save_full_session_transcript(req: SaveFullSessionTranscriptRequest, db: AsyncSession = Depends(get_db)):
+    """Flushes and saves full session messages to the database upon End Call."""
+    msg_dicts = [m.model_dump() for m in req.messages]
+    sess = await CustomerService.save_full_session_transcript(
+        db,
+        session_id_str=req.session_id,
+        customer_id_str=req.customer_id,
+        customer_name=req.customer_name,
+        customer_phone=req.customer_phone,
+        vehicle_id=req.vehicle_id,
+        channel=req.channel or "VOICE_LIVE",
+        messages=msg_dicts
+    )
+    return {"status": "success", "session_id": sess.session_id, "customer_id": sess.customer_id}

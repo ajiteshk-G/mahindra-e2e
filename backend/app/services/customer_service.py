@@ -139,29 +139,7 @@ class CustomerService:
             await db.commit()
             await db.refresh(customer)
             
-            # Create first session
-            first_session = ConversationSession(
-                session_id=f"SESS-{uuid.uuid4().hex[:8].upper()}",
-                customer_id=customer.id,
-                session_type="LIVE_CALL",
-                vehicle_id="thar_roxx",
-                summary="Explored Thar ROXX AX7L Diesel AT 4x4 with FSD Suspension."
-            )
-            db.add(first_session)
-            await db.commit()
-            await db.refresh(first_session)
-            
-            init_log = InteractionLog(
-                session_id=first_session.id,
-                customer_id=customer.id,
-                channel="VOICE_LIVE",
-                speaker="mia",
-                message="Namaste Aarav! Welcome to Mahindra. How can I help you explore our authentic and born electric SUV lineup today?",
-                extracted_intent="EXPLORE_CATALOG",
-                tool_triggered="show_vehicle_carousel"
-            )
-            db.add(init_log)
-            await db.commit()
+# Clean default customer without synthetic dummy sessions
             
             # Refresh with all eager loads
             stmt_reload = (
@@ -240,23 +218,12 @@ class CustomerService:
         await db.commit()
         await db.refresh(new_session)
 
-        # Initial Mia greeting logged in this session
+        # No premature greeting logged; only authentic conversation turns will be recorded
         greeting_text = (
             f"Namaste {customer.name}! Welcome back to Mahindra. Continuing your exploration of {vehicle_id.replace('_', ' ').title()}?"
             if is_returning
             else f"Namaste {customer.name}! Welcome to Mahindra. Which SUV can I help you explore today?"
         )
-        
-        greeting_log = InteractionLog(
-            session_id=new_session.id,
-            customer_id=customer.id,
-            channel="VOICE_LIVE" if session_type == "LIVE_CALL" else "WEB_CHAT",
-            speaker="mia",
-            message=greeting_text,
-            extracted_intent="SESSION_INIT"
-        )
-        db.add(greeting_log)
-        await db.commit()
 
         # Count total sessions for customer
         count_stmt = select(func.count(ConversationSession.id)).where(ConversationSession.customer_id == customer.id)
@@ -330,8 +297,18 @@ class CustomerService:
             stmt = select(ConversationSession).where(ConversationSession.session_id == session_id_str)
             res = await db.execute(stmt)
             sess = res.scalars().first()
-            if sess:
-                session_db_id = sess.id
+            if not sess:
+                sess = ConversationSession(
+                    session_id=session_id_str,
+                    customer_id=customer.id,
+                    session_type="LIVE_CALL" if channel == "VOICE_LIVE" else "CHAT_BOT",
+                    vehicle_id=customer.interested_vehicle_id or "thar_roxx",
+                    summary=f"Virtual Showroom Consultation with Kabir for {customer.name}"
+                )
+                db.add(sess)
+                await db.commit()
+                await db.refresh(sess)
+            session_db_id = sess.id
 
         log = InteractionLog(
             session_id=session_db_id,
@@ -362,3 +339,103 @@ class CustomerService:
         )
         res = await db.execute(stmt)
         return res.scalars().all()
+
+    @staticmethod
+    async def save_full_session_transcript(
+        db: AsyncSession,
+        session_id_str: str,
+        customer_id_str: Optional[str] = None,
+        customer_name: Optional[str] = None,
+        customer_phone: Optional[str] = None,
+        vehicle_id: Optional[str] = "thar_roxx",
+        channel: str = "VOICE_LIVE",
+        messages: List[dict] = []
+    ) -> ConversationSession:
+        """
+        Guarantees full persistence of conversation session and all its transcript turns upon End Call.
+        """
+        customer = None
+        if customer_phone and customer_phone.strip():
+            customer = await CustomerService.get_or_create_customer_by_phone(
+                db, phone=customer_phone, name=customer_name or "Valued Customer", vehicle_id=vehicle_id or "thar_roxx"
+            )
+        elif customer_id_str:
+            customer = await CustomerService.get_customer_by_id(db, customer_id_str)
+            
+        if not customer:
+            customer = await CustomerService.get_or_create_default_customer(db)
+            if customer_name and customer_name.strip() and customer.name in ["Valued Customer", "Guest"]:
+                customer.name = customer_name.strip()
+                await db.commit()
+
+        stmt = select(ConversationSession).where(ConversationSession.session_id == session_id_str)
+        res = await db.execute(stmt)
+        sess = res.scalars().first()
+        if not sess:
+            sess = ConversationSession(
+                session_id=session_id_str,
+                customer_id=customer.id,
+                session_type="LIVE_CALL" if channel == "VOICE_LIVE" else "CHAT_BOT",
+                vehicle_id=vehicle_id or customer.interested_vehicle_id or "thar_roxx",
+                summary=f"Virtual Showroom Consultation with Kabir for {customer.name}"
+            )
+            db.add(sess)
+            await db.commit()
+            await db.refresh(sess)
+
+        # Query existing messages for deduplication
+        existing_stmt = select(InteractionLog).where(InteractionLog.session_id == sess.id)
+        e_res = await db.execute(existing_stmt)
+        existing_logs = e_res.scalars().all()
+        existing_texts = {(l.speaker, l.message.strip()) for l in existing_logs}
+
+        for m in messages:
+            spk = m.get("speaker", "customer")
+            if spk == "system":
+                continue
+            text = m.get("text", "").strip()
+            if not text or (spk, text) in existing_texts:
+                continue
+
+            log = InteractionLog(
+                session_id=sess.id,
+                customer_id=customer.id,
+                channel=channel or "VOICE_LIVE",
+                speaker=spk,
+                message=text,
+                extracted_intent=m.get("toolCall"),
+                tool_triggered=m.get("toolCall")
+            )
+            db.add(log)
+            existing_texts.add((spk, text))
+
+        sess.ended_at = datetime.now(timezone.utc)
+        
+        # Automatically extract and persist focus features for the Sales Advisor's Demo Checklist
+        from app.services.checklist_service import ChecklistService
+        from app.models.booking import TestDriveBooking
+        from sqlalchemy.orm.attributes import flag_modified
+
+        veh_id = vehicle_id or customer.interested_vehicle_id or "thar_roxx"
+        customer_dialogues = " ".join([m.get("text", "") for m in messages if m.get("speaker") == "customer"])
+        
+        extracted_checklist = ChecklistService.extract_checklist_items(customer_dialogues, vehicle_id=veh_id)
+        if not extracted_checklist:
+            # Fall back to static vehicle checklist if LLM / regex cannot make out custom asks
+            extracted_checklist = ChecklistService.get_static_checklist(veh_id)
+
+        customer.advisor_checklist = list(extracted_checklist)
+        flag_modified(customer, "advisor_checklist")
+        db.add(customer)
+
+        # Update any active test drive bookings for this customer
+        booking_stmt = select(TestDriveBooking).where(TestDriveBooking.customer_id == customer.id)
+        b_res = await db.execute(booking_stmt)
+        for b in b_res.scalars().all():
+            b.advisor_checklist = list(extracted_checklist)
+            flag_modified(b, "advisor_checklist")
+            db.add(b)
+
+        await db.commit()
+        await db.refresh(sess)
+        return sess

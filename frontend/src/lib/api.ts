@@ -227,3 +227,31 @@ export async function fileInsuranceClaim(payload: any) {
 }
 
 
+
+export async function saveFullSessionTranscript(payload: {
+  session_id: string;
+  customer_id?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  vehicle_id?: string;
+  channel?: string;
+  messages: Array<{
+    speaker: string;
+    text: string;
+    timestamp?: string;
+    toolCall?: string;
+    language?: string;
+  }>;
+}) {
+  try {
+    const res = await fetch(`${API_BASE}/customer/save-full-transcript`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  } catch (err) {
+    console.debug("Failed to flush session transcript to database:", err);
+    return null;
+  }
+}

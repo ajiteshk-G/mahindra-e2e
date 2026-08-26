@@ -114,6 +114,13 @@ class NotificationService:
             "status": "INITIATED"
         }
 
+        # Chargeable SMS Guard: Disabled by default via config
+        if not settings.ENABLE_SMS_DISPATCH:
+            logger.info(f"[SMS DISABLED BY CONFIG] Live chargeable SMS dispatch skipped for {formatted_phone}. Simulated successfully.")
+            result["status"] = "SIMULATED_CONFIG_OFF"
+            result["success"] = True
+            return result
+
         if account_sid and auth_token:
             try:
                 url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json"

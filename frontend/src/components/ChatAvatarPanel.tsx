@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { LiveMessage } from "@/hooks/useLiveVoice";
 import { AvatarVideoPlayer } from "./AvatarVideoPlayer";
 import { TestDriveChatCalendar } from "./TestDriveChatCalendar";
+import { identifyCustomer, saveFullSessionTranscript } from "@/lib/api";
 import {
   Power,
   PhoneOff,
@@ -31,7 +32,7 @@ interface ChatAvatarPanelProps {
   rmsLevel: number;
   messages: LiveMessage[];
   activeLanguage: string;
-  onToggleRecording: (customerName?: string) => void;
+  onToggleRecording: (customerName?: string, customerPhone?: string, vehicleId?: string) => void;
   onSendMessage: (text: string) => void;
   onSwitchLanguage?: (lang: string) => void;
   onSelectPrompt?: (text: string) => void;
@@ -62,43 +63,60 @@ export function ChatAvatarPanel({
   const [isVerified, setIsVerified] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
 
-  // Open calendar widget ONLY when customer agrees or explicitly requests to book a test drive
+  // Open calendar widget when customer asks for a test ride/drive or agrees to book
   useEffect(() => {
-    if (messages.length > 0) {
-      const lastMsg = messages[messages.length - 1];
-      const lastText = (lastMsg.text || "").trim();
-      const prevMsg = messages.length > 1 ? messages[messages.length - 2] : null;
+    if (messages.length === 0) return;
 
-      // 1. Explicit tool call triggered by Gemini when booking is initiated
-      if (lastMsg.toolCall === "book_test_drive" || lastMsg.toolCall === "open_test_drive_booking") {
+    for (let i = messages.length - 1; i >= Math.max(0, messages.length - 3); i--) {
+      const msg = messages[i];
+      const text = (msg.text || "").trim();
+      const lower = text.toLowerCase();
+
+      // 1. Tool call triggered
+      if (
+        msg.toolCall === "book_test_drive" ||
+        msg.toolCall === "open_test_drive_booking"
+      ) {
         setShowCalendar(true);
         return;
       }
 
-      // 2. Direct customer request to book
-      if (lastMsg.speaker === "customer") {
-        const isDirectBookingRequest =
-          /\b(book|schedule|reserve)\s+(a\s+)?(test\s+(drive|ride)|slot)\b/i.test(lastText) ||
-          /\b(want|like|ready)\s+to\s+(book|take|schedule)\s+(a\s+)?(test\s+(drive|ride)|slot)\b/i.test(lastText) ||
-          /\b(test\s+(drive|ride))\s+(book|karna|chahiye|kara\s+do)\b/i.test(lastText);
+      // 2. Customer explicitly asks about / requests test drive or test ride
+      if (msg.speaker === "customer") {
+        const isTestDriveCustomerIntent =
+          /(test\s*(drive|ride)|book\s*(a\s*)?(drive|ride|slot)|schedule\s*(a\s*)?(drive|ride|slot)|take\s*(a\s*)?(drive|ride)|drive\s*book|ride\s*book|drive\s*karna|ride\s*karna|drive\s*lena|ride\s*lena|chahiye|kara\s*do)/i.test(lower) ||
+          /(book|schedule|reserve|slot).*(thar|scorpio|xuv|be|xev|car|suv|vehicle)/i.test(lower);
 
-        if (isDirectBookingRequest) {
+        if (isTestDriveCustomerIntent) {
           setShowCalendar(true);
           return;
         }
 
-        // 3. Customer agreement response to Kabir's invitation
-        if (prevMsg && prevMsg.speaker === "mia") {
-          const prevOfferedTestDrive =
-            /(test\s+(drive|ride)|book\s+(a\s+)?drive|slot|schedule)/i.test(prevMsg.text);
-          const customerAgreed =
-            /^(yes|yeah|yep|sure|ok|okay|please|definitely|let'?s\s+do\s+it|book\s+it|ha|haan|zaroor|bilkul|proceed)\b/i.test(lastText) ||
-            /\b(yes\s+please|book\s+it|schedule\s+it|let'?s\s+book)\b/i.test(lastText);
+        // 3. Customer agreed ("yes", "sure", "ok", "book it") to assistant's test drive offer
+        if (i > 0) {
+          const prev = messages[i - 1];
+          if (prev.speaker === "mia") {
+            const prevOffered = /(test\s*(drive|ride)|book|schedule|slot|preferred\s*date|calendar)/i.test(prev.text || "");
+            const customerAgreed =
+              /^(yes|yeah|yep|sure|ok|okay|please|definitely|let'?s\s+do\s+it|book\s+it|ha|haan|zaroor|bilkul|proceed|go\s*ahead|done)/i.test(lower) ||
+              /(yes\s*please|book\s*it|schedule\s*it|let'?s\s*book|kar\s*do)/i.test(lower);
 
-          if (prevOfferedTestDrive && customerAgreed) {
-            setShowCalendar(true);
-            return;
+            if (prevOffered && customerAgreed) {
+              setShowCalendar(true);
+              return;
+            }
           }
+        }
+      }
+
+      // 4. Assistant mentions opening booking calendar / selecting slots
+      if (msg.speaker === "mia") {
+        if (
+          /(opening|opened|shared|choose|select).*(test\s*(drive|ride)|calendar|slot|date\s*and\s*time)/i.test(lower) ||
+          /(calendar|slot\s*card|below).*(test\s*(drive|ride)|booking)/i.test(lower)
+        ) {
+          setShowCalendar(true);
+          return;
         }
       }
     }
@@ -143,6 +161,13 @@ export function ChatAvatarPanel({
     }
 
     setIsVerified(true);
+    // Identify or register customer in DB to persist their session
+    identifyCustomer({
+      name: name.trim(),
+      phone: phone.trim(),
+      session_type: "LIVE_CALL",
+      vehicle_id: activeVehicleId
+    }).catch((err) => console.debug("Identify customer notice:", err));
   };
 
   const [inputText, setInputText] = useState("");
@@ -255,7 +280,7 @@ export function ChatAvatarPanel({
               <button
                 id="connectBtn"
                 className="btn-primary-connect"
-                onClick={() => onToggleRecording(name)}
+                onClick={() => onToggleRecording(name, phone, activeVehicleId)}
                 title="Start Live Voice Consultation with Kabir"
               >
                 <Power className="w-3.5 h-3.5" /> Start Live Session
@@ -457,7 +482,7 @@ export function ChatAvatarPanel({
               className="avatar-output-wrapper cursor-pointer group"
               id="avatar-output-pane"
               onClick={() => {
-                if (!isRecording) onToggleRecording(name);
+                if (!isRecording) onToggleRecording(name, phone, activeVehicleId);
               }}
               title={isRecording ? "Live Voice Session Active" : "Click to Start Voice Session with Kabir"}
             >
@@ -487,7 +512,7 @@ export function ChatAvatarPanel({
           <span id="micBtn">
             <button
               className="control-circle-btn active"
-              onClick={() => onToggleRecording(name)}
+              onClick={() => onToggleRecording(name, phone, activeVehicleId)}
               title="Mute Microphone"
             >
               <Mic className="w-4 h-4" />
@@ -497,7 +522,7 @@ export function ChatAvatarPanel({
           <span id="micOffBtn">
             <button
               className="control-circle-btn"
-              onClick={() => onToggleRecording(name)}
+              onClick={() => onToggleRecording(name, phone, activeVehicleId)}
               title="Unmute Microphone"
             >
               <MicOff className="w-4 h-4" />

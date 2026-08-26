@@ -140,3 +140,19 @@ class SaveTranscriptTurnRequest(BaseModel):
     message: str
     extracted_intent: Optional[str] = None
     tool_triggered: Optional[str] = None
+
+class FullTranscriptMessageItem(BaseModel):
+    speaker: str
+    text: str
+    timestamp: Optional[str] = None
+    toolCall: Optional[str] = None
+    language: Optional[str] = None
+
+class SaveFullSessionTranscriptRequest(BaseModel):
+    session_id: str
+    customer_id: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    vehicle_id: Optional[str] = "thar_roxx"
+    channel: Optional[str] = "VOICE_LIVE"
+    messages: List[FullTranscriptMessageItem] = []

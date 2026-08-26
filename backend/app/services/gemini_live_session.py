@@ -272,7 +272,7 @@ class AudioSessionManager:
                     await res
             except Exception:
                 pass
-        elif any(w in lower for w in ["test drive", "test ride", "book drive", "ड्राइव", "டிரைவ்", "డ్రైవ్"]):
+        elif any(w in lower for w in ["test drive", "test ride", "book drive", "book ride", "schedule drive", "schedule ride", "take a ride", "take a drive", "ride book", "drive book", "ड्राइव", "டிரைவ்", "డ్రైవ్"]):
             tool_call = "open_test_drive_booking"
             tool_args = {"vehicle_id": self.active_vehicle_id}
             try:

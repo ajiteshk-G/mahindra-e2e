@@ -109,39 +109,7 @@ async def get_admin_bookings(
                     "timestamp": dt.strftime("%I:%M %p, %d %b %Y") if dt else ""
                 })
 
-        # Fallback pre-sales transcript if turn logs are sparse
-        if not presales_turns:
-            b_dt = b.created_at
-            presales_turns = [
-                {
-                    "id": 1,
-                    "session_id": f"SESS-{b.booking_reference}",
-                    "session_type": "LIVE_VOICE",
-                    "vehicle_id": b.vehicle_id,
-                    "vehicle_name": veh_name,
-                    "speaker": "Customer",
-                    "role": "customer",
-                    "message": f"Namaste Kabir, I would like to schedule a test ride for {veh_name}.",
-                    "date": b_dt.strftime("%d %b %Y") if b_dt else "Today",
-                    "full_date": b_dt.strftime("%A, %d %B %Y") if b_dt else "Today",
-                    "time": b_dt.strftime("%I:%M %p") if b_dt else "Just now",
-                    "timestamp": b_dt.strftime("%I:%M %p, %d %b %Y") if b_dt else "Just now"
-                },
-                {
-                    "id": 2,
-                    "session_id": f"SESS-{b.booking_reference}",
-                    "session_type": "LIVE_VOICE",
-                    "vehicle_id": b.vehicle_id,
-                    "vehicle_name": veh_name,
-                    "speaker": "Kabir (AI Specialist)",
-                    "role": "mia",
-                    "message": f"Bahut badhiya {cust_name}! I have arranged your test drive for {b.variant} at {b.dealership_name} on {b.scheduled_date} at {b.scheduled_time_slot}.",
-                    "date": b_dt.strftime("%d %b %Y") if b_dt else "Today",
-                    "full_date": b_dt.strftime("%A, %d %B %Y") if b_dt else "Today",
-                    "time": b_dt.strftime("%I:%M %p") if b_dt else "Just now",
-                    "timestamp": b_dt.strftime("%I:%M %p, %d %b %Y") if b_dt else "Just now"
-                }
-            ]
+# No dummy transcripts fallback; only authentic database entries
 
         # B. Fetch In-Vehicle Test Ride Recording & Audio Transcript (Blank by default until recorded)
         test_ride_turns = []
@@ -251,6 +219,86 @@ async def get_admin_bookings(
             "test_ride_sessions": test_ride_sessions
         }
         admin_records.append(record)
+
+    # Process all other registered showroom leads / customers without a finalized test drive slot yet
+    all_cust_res = await db.execute(
+        select(Customer)
+        .options(selectinload(Customer.interactions).selectinload(InteractionLog.session))
+        .order_by(desc(Customer.updated_at))
+    )
+    all_customers = all_cust_res.scalars().all()
+
+    for c in all_customers:
+        norm_p = clean_phone(c.phone) if c.phone else f"CUST-{c.id}"
+        if norm_p in seen_customer_phones:
+            continue
+        seen_customer_phones.add(norm_p)
+
+        veh_id = c.interested_vehicle_id or "thar_roxx"
+        v_info = CatalogService.get_vehicle_by_id(veh_id)
+        veh_name = v_info.name if v_info else veh_id.replace("_", " ").title()
+
+        # Build pre-sales transcripts for this lead
+        lead_presales = []
+        for log in sorted(c.interactions, key=lambda x: x.created_at or datetime.min):
+            if log.channel == "TEST_RIDE_IN_VEHICLE":
+                continue
+            speaker_label = "Customer" if log.speaker == "customer" else "Kabir (AI Specialist)"
+            dt = log.created_at
+            sess = log.session
+            sess_uid = sess.session_id if sess else f"SESS-{dt.strftime('%Y%m%d-%H%M') if dt else 'SHOWROOM'}"
+            sess_type = sess.session_type if sess else ("LIVE_VOICE" if log.channel == "VOICE_LIVE" else "CHAT_BOT")
+
+            lead_presales.append({
+                "id": log.id,
+                "session_id": sess_uid,
+                "session_type": sess_type,
+                "vehicle_id": veh_id,
+                "vehicle_name": veh_name,
+                "speaker": speaker_label,
+                "role": log.speaker,
+                "message": log.message,
+                "channel": log.channel,
+                "intent": log.extracted_intent,
+                "tool": log.tool_triggered,
+                "date": dt.strftime("%d %b %Y") if dt else "Today",
+                "full_date": dt.strftime("%A, %d %B %Y") if dt else "Today",
+                "time": dt.strftime("%I:%M %p") if dt else "",
+                "timestamp": dt.strftime("%I:%M %p, %d %b %Y") if dt else ""
+            })
+
+        admin_records.append({
+            "booking_id": None,
+            "booking_reference": f"LEAD-{c.customer_id.replace('CUST-', '')}",
+            "customer_id": c.customer_id,
+            "customer_name": c.name,
+            "customer_phone": c.phone,
+            "customer_city": c.city or "Mumbai",
+            "vehicle_id": veh_id,
+            "vehicle_name": veh_name,
+            "variant": c.interested_variant or "AX7L Diesel AT 4x4",
+            "color": "Stealth Black",
+            "dealership_id": "BAYVIEW-MUM-01",
+            "dealership_name": "Bayview Mahindra, Bandra West, Mumbai",
+            "sales_advisor_name": "Kabir (AI Specialist)",
+            "booking_type": "SHOWROOM_VISIT",
+            "delivery_address": "Showroom Consultation",
+            "scheduled_date": "Slot Pending",
+            "scheduled_time_slot": "Pending Selection",
+            "status": "CONFIRMED" if lead_presales else "LEAD_ENGAGED",
+            "sms_status": "READY",
+            "created_at": c.created_at.strftime("%Y-%m-%d %H:%M:%S") if c.created_at else "",
+            "presales_transcript": lead_presales,
+            "test_ride_transcript": [],
+            "sentiment_score": 0.85 if lead_presales else None,
+            "purchase_intent": 0.80 if lead_presales else None,
+            "loved_features": [],
+            "objections_raised": [],
+            "advisor_coaching_feedback": "Active showroom lead. Follow up to confirm test drive date and time.",
+            "recommended_action": "Call customer to assist with slot reservation.",
+            "gcs_recording_uri": None,
+            "test_ride_sessions": []
+        })
 
     # Filter in memory if search query provided
     filtered = admin_records

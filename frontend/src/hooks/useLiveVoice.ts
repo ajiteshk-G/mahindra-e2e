@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { LiveAudioOutputManager, LiveVideoOutputManager } from "@/lib/audioManager";
+import { saveFullSessionTranscript } from "@/lib/api";
 
 export interface LiveMessage {
   id: string;
@@ -29,6 +30,7 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const recognitionRef = useRef<any>(null);
   const sessionIdRef = useRef<string>(`SESS-${Date.now()}`);
+  const customerInfoRef = useRef<{ name?: string; phone?: string; customer_id?: string; vehicle_id?: string }>({});
   const audioOutputManagerRef = useRef<LiveAudioOutputManager | null>(null);
   const videoOutputManagerRef = useRef<LiveVideoOutputManager | null>(null);
 
@@ -325,7 +327,14 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
     }
   };
 
-  const startVoiceRecording = async (customerName?: string) => {
+  const startVoiceRecording = async (customerName?: string, customerPhone?: string, vehicleId?: string) => {
+    if (customerName || customerPhone || vehicleId) {
+      customerInfoRef.current = {
+        name: customerName || customerInfoRef.current.name,
+        phone: customerPhone || customerInfoRef.current.phone,
+        vehicle_id: vehicleId || customerInfoRef.current.vehicle_id || "thar_roxx"
+      };
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
@@ -381,55 +390,7 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
         processor.connect(audioCtx.destination);
       }
 
-      // Browser speech recognition for live speech-to-text ONLY during REST fallback (when WebSocket is not open)
-      const isWsActive = socketRef.current && socketRef.current.readyState === WebSocket.OPEN;
-      const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!isWsActive && SpeechRecognition) {
-        try {
-          const recognition = new SpeechRecognition();
-          recognition.continuous = true;
-          recognition.interimResults = false;
-
-          const langMap: Record<string, string> = {
-            Hindi: "hi-IN",
-            Marathi: "mr-IN",
-            Tamil: "ta-IN",
-            Telugu: "te-IN",
-            Kannada: "kn-IN",
-            Malayalam: "ml-IN",
-            Bengali: "bn-IN",
-            Gujarati: "gu-IN",
-            Punjabi: "pa-IN",
-            Odia: "or-IN",
-            Urdu: "ur-IN",
-            Assamese: "as-IN",
-            English: "en-IN",
-            Hinglish: "hi-IN"
-          };
-          recognition.lang = langMap[activeLanguage] || "hi-IN";
-
-          recognition.onresult = (event: any) => {
-            // Guard: Ignore microphone input if Kabir is actively speaking through TTS
-            if (typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.speaking) {
-              return;
-            }
-            const transcript = event.results[event.results.length - 1][0].transcript;
-            if (transcript && transcript.trim()) {
-              sendTextMessage(transcript.trim());
-            }
-          };
-
-          recognition.onerror = (e: any) => {
-            if (e.error !== "no-speech" && e.error !== "aborted") {
-              console.debug("Speech recognition notice:", e.error);
-            }
-          };
-
-          recognition.start();
-          recognitionRef.current = recognition;
-        } catch (e) {}
-      }
+// Native audio streaming only - No TTS / STT
 
       // Trigger dynamic greeting from Kabir on starting live session if no messages yet
       if (messages.length === 0) {
@@ -509,12 +470,7 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
       } catch (e) {}
       audioContextRef.current = null;
     }
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {}
-      recognitionRef.current = null;
-    }
+
     if (socketRef.current) {
       try {
         if (socketRef.current.readyState === WebSocket.OPEN) {
@@ -542,12 +498,26 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
     setIsRecording(false);
     setRmsLevel(0);
 
+    // Flush and persist the entire conversation session transcript to SQLite database
+    const currentMsgs = [...messages];
+    if (currentMsgs.length > 0) {
+      saveFullSessionTranscript({
+        session_id: sessionIdRef.current,
+        customer_id: customerInfoRef.current.customer_id,
+        customer_name: customerInfoRef.current.name,
+        customer_phone: customerInfoRef.current.phone,
+        vehicle_id: customerInfoRef.current.vehicle_id || "thar_roxx",
+        channel: "VOICE_LIVE",
+        messages: currentMsgs
+      });
+    }
+
     setMessages((prev) => [
       ...prev,
       {
         id: `end-${Date.now()}`,
         speaker: "system",
-        text: "Voice consultation ended.",
+        text: "Voice consultation ended. Transcript saved to database.",
         timestamp: new Date().toLocaleTimeString()
       }
     ]);

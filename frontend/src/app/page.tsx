@@ -220,11 +220,15 @@ export default function Home() {
             rmsLevel={liveVoice.rmsLevel}
             messages={liveVoice.messages}
             activeLanguage={liveVoice.activeLanguage}
-            onToggleRecording={(custName) => {
+            onToggleRecording={(custName, custPhone, vehId) => {
               if (liveVoice.isRecording) {
                 liveVoice.stopVoiceRecording();
               } else {
-                liveVoice.startVoiceRecording(custName || profile?.name);
+                liveVoice.startVoiceRecording(
+                  custName || profile?.name,
+                  custPhone || profile?.phone,
+                  vehId || selectedVehicleId
+                );
               }
             }}
             onSendMessage={liveVoice.sendTextMessage}

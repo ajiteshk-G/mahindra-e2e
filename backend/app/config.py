@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./mahindra_omnichannel.db")
     WS_LIVE_AUDIO_PATH: str = "/ws/live-audio"
-    DEFAULT_DEALERSHIP: str = "Bayview Mahindra, Bandra West, Mumbai"
+    DEFAULT_DEALERSHIP: str = "Bayview Mahindra, Bandra West, Mumbai"    
+    # SMS Dispatch Configuration (Chargeable - Disabled by default)
+    ENABLE_SMS_DISPATCH: bool = os.getenv("ENABLE_SMS_DISPATCH", "false").lower() in ("true", "1", "yes")
+
     
     model_config = SettingsConfigDict(case_sensitive=True)
 
