@@ -7,6 +7,7 @@ from google import genai
 from google.genai import types
 from app.config import settings
 from app.services.catalog_service import CatalogService
+from app.services.checklist_service import ChecklistService
 from app.services.customer_service import CustomerService
 
 logger = logging.getLogger("gemini_live_session")
@@ -103,6 +104,22 @@ GEMINI_TOOLS_DECLARATIONS = [
         }
     },
     {
+        "name": "update_advisor_checklist",
+        "description": "Call this tool whenever customer asks about or is interested in specific features, technology, comfort, or performance aspects, to dynamically add tailored demonstration points to the Sales Advisor Demo Checklist in the database for their test drive.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "vehicle_id": {"type": "STRING", "description": "Vehicle ID: thar_roxx, scorpio_n, xuv700, be_6e, xev_9e, xuv_3xo, etc."},
+                "checklist_items": {
+                    "type": "ARRAY",
+                    "items": {"type": "STRING"},
+                    "description": "Actionable demo items for sales advisor (e.g. 'Demonstrate Frequency Selective Damping (FSD) over potholes', 'Showcase Panoramic Skyroof & Harman Kardon 9-Speaker Audio')"
+                }
+            },
+            "required": ["checklist_items"]
+        }
+    },
+    {
         "name": "book_test_drive",
         "description": "Opens test drive booking calendar and executes test drive booking for the chosen vehicle model and variant.",
         "parameters": {
@@ -181,6 +198,7 @@ class AudioSessionManager:
         self.language = "Hinglish"
         self.active_vehicle_id = "thar_roxx"
         self.chat_history: list = []
+        self.checklist_items: list = []
         self.vertex_client: Optional[genai.Client] = None
         
         # Initialize Vertex AI Client with Project mb-poc-352009
@@ -264,6 +282,25 @@ class AudioSessionManager:
             except Exception:
                 pass
 
+        # 1b. Dynamic Advisor Demo Checklist extraction from customer asks
+        new_extracted = ChecklistService.extract_checklist_items(
+            customer_text=text,
+            vehicle_id=self.active_vehicle_id,
+            existing_items=self.checklist_items
+        )
+        if new_extracted:
+            self.checklist_items = new_extracted
+            try:
+                chk_res = emit_ui_callback({
+                    "type": "CHECKLIST_UPDATED",
+                    "vehicle_id": self.active_vehicle_id,
+                    "checklist": self.checklist_items
+                })
+                if asyncio.iscoroutine(chk_res):
+                    await chk_res
+            except Exception:
+                pass
+
         # 2. Invoke Vertex AI Gemini 2.5 Flash Model
         response_text = ""
         if self.vertex_client:
@@ -305,5 +342,7 @@ class AudioSessionManager:
             "message": response_text,
             "tool_call": tool_call,
             "tool_args": tool_args,
-            "language": self.language
+            "language": self.language,
+            "checklist": self.checklist_items,
+            "vehicle_id": self.active_vehicle_id
         }

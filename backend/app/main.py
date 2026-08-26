@@ -24,6 +24,22 @@ async def lifespan(app: FastAPI):
     # Initialize DB schemas on startup
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Safe SQLite column additions if not present
+        try:
+            from sqlalchemy import text
+            await conn.execute(text('ALTER TABLE test_drive_bookings ADD COLUMN advisor_checklist JSON'))
+        except Exception:
+            pass
+        try:
+            from sqlalchemy import text
+            await conn.execute(text('ALTER TABLE customers ADD COLUMN advisor_checklist JSON'))
+        except Exception:
+            pass
+        try:
+            from sqlalchemy import text
+            await conn.execute(text('ALTER TABLE test_ride_recordings ADD COLUMN booking_reference VARCHAR(64)'))
+        except Exception:
+            pass
         
     # Seed default customer and dealerships
     async with AsyncSessionLocal() as db:

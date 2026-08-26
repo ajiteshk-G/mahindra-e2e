@@ -7,15 +7,17 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from pydantic import BaseModel
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 import google.auth
 import google.auth.transport.requests
 import websockets
 
 from app.config import settings
-from app.database import AsyncSessionLocal
+from app.database import AsyncSessionLocal, get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.gemini_live_session import AudioSessionManager, KABIR_SYSTEM_PROMPT
 from app.services.customer_service import CustomerService
+from app.models.customer import Customer
 
 logger = logging.getLogger("ws_live")
 router = APIRouter(tags=["Live Audio & Multimodal Chat"])
@@ -45,26 +47,34 @@ class LiveChatResponse(BaseModel):
     language: str
 
 @router.post("/api/live/chat", response_model=LiveChatResponse)
-async def post_live_chat(req: LiveChatRequest):
+async def post_live_chat(req: LiveChatRequest, db: AsyncSession = Depends(get_db)):
     """HTTP REST fallback for web proxy environments where direct WebSocket ports are blocked."""
     session_id = req.session_id or f"SESS-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
     customer_id = req.customer_id or "CUST-9820155432"
 
-    async with AsyncSessionLocal() as db:
-        customer = await CustomerService.get_customer_by_id(db, customer_id)
-        if not customer:
-            customer = await CustomerService.get_customer_by_phone(db, customer_id)
-        if not customer:
-            customer = await CustomerService.get_or_create_default_customer(db)
-
-        await CustomerService.log_interaction(
-            db,
-            customer_id_str=customer.customer_id,
-            speaker="customer",
-            message=req.message,
-            channel="VOICE_LIVE",
-            session_id_str=session_id
+    customer = await CustomerService.get_customer_by_id(db, customer_id)
+    if not customer:
+        customer = await CustomerService.get_customer_by_phone(db, customer_id)
+    if not customer:
+        customer = Customer(
+            customer_id=customer_id,
+            name="Valued Customer",
+            phone=f"+91 98{abs(hash(customer_id)) % 100000000:08d}",
+            city="Mumbai",
+            interested_vehicle_id=req.vehicle_id or "thar_roxx"
         )
+        db.add(customer)
+        await db.commit()
+        await db.refresh(customer)
+
+    await CustomerService.log_interaction(
+        db,
+        customer_id_str=customer.customer_id,
+        speaker="customer",
+        message=req.message,
+        channel="VOICE_LIVE",
+        session_id_str=session_id
+    )
 
     session_mgr = get_or_create_session(session_id=session_id, customer_id=customer.customer_id)
     if req.language and session_mgr.language == "Hinglish":
@@ -78,16 +88,23 @@ async def post_live_chat(req: LiveChatRequest):
 
     result = await session_mgr.process_user_text_or_intent(req.message, capture_ui_event)
 
-    async with AsyncSessionLocal() as db:
-        await CustomerService.log_interaction(
+    await CustomerService.log_interaction(
+        db,
+        customer_id_str=customer.customer_id,
+        speaker="mia",
+        message=result["message"],
+        channel="VOICE_LIVE",
+        session_id_str=session_id,
+        intent=result.get("tool_call"),
+        tool=result.get("tool_call")
+    )
+    if result.get("checklist"):
+        from app.services.checklist_service import ChecklistService
+        await ChecklistService.update_customer_and_booking_checklist(
             db,
             customer_id_str=customer.customer_id,
-            speaker="mia",
-            message=result["message"],
-            channel="VOICE_LIVE",
-            session_id_str=session_id,
-            intent=result.get("tool_call"),
-            tool=result.get("tool_call")
+            vehicle_id=session_mgr.active_vehicle_id,
+            new_items=result["checklist"]
         )
 
     return LiveChatResponse(
@@ -150,6 +167,12 @@ async def live_audio_websocket(websocket: WebSocket):
         "session_id": session_id,
         "model": settings.GEMINI_LIVE_MODEL,
         "voice": settings.AVATAR_VOICE,
+        "customer": {
+            "id": customer.id,
+            "customer_id": customer.customer_id,
+            "name": customer.name,
+            "phone": customer.phone
+        },
         "greeting": f"Namaste {customer.name}! Main Kabir, Mahindra Auto se. Main aapki {customer.interested_vehicle_id.replace('_', ' ').title()} me madad kar sakta hoon."
     }))
 
@@ -223,6 +246,21 @@ async def live_audio_websocket(websocket: WebSocket):
                                                 "vehicle_id_2": {"type": "string"}
                                             },
                                             "required": ["vehicle_id_1", "vehicle_id_2"]
+                                        }
+                                    },
+                                    {
+                                        "name": "update_advisor_checklist",
+                                        "description": "Call this tool to add personalized demo points to the Sales Advisor Demo Checklist in database whenever customer inquires about features, comfort, safety, or tech.",
+                                        "parameters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "vehicle_id": {"type": "string"},
+                                                "checklist_items": {
+                                                    "type": "array",
+                                                    "items": {"type": "string"}
+                                                }
+                                            },
+                                            "required": ["checklist_items"]
                                         }
                                     },
                                     {
@@ -365,6 +403,17 @@ async def live_audio_websocket(websocket: WebSocket):
                                         }
                                         await bidi_ws.send(json.dumps(tool_resp))
 
+                                        # Persist checklist if tool is update_advisor_checklist
+                                        if fc_name == "update_advisor_checklist":
+                                            items = fc_args.get("checklist_items", [])
+                                            veh = fc_args.get("vehicle_id", session_mgr.active_vehicle_id)
+                                            if items:
+                                                async with AsyncSessionLocal() as db:
+                                                    from app.services.checklist_service import ChecklistService
+                                                    await ChecklistService.update_customer_and_booking_checklist(
+                                                        db, customer_id_str=customer.customer_id, vehicle_id=veh, new_items=items
+                                                    )
+
                                         # Emit UI action to client
                                         await websocket.send_text(json.dumps({
                                             "type": "UI_ACTION",
@@ -465,6 +514,15 @@ async def live_audio_websocket(websocket: WebSocket):
                 elif msg_type == "USER_CHAT":
                     user_text = payload.get("text", "")
                     result = await session_mgr.process_user_text_or_intent(user_text, lambda ev: None)
+                    if result.get("checklist"):
+                        async with AsyncSessionLocal() as db:
+                            from app.services.checklist_service import ChecklistService
+                            await ChecklistService.update_customer_and_booking_checklist(
+                                db,
+                                customer_id_str=customer.customer_id,
+                                vehicle_id=session_mgr.active_vehicle_id,
+                                new_items=result["checklist"]
+                            )
                     await websocket.send_text(json.dumps({
                         "type": "ASSISTANT_RESPONSE",
                         "session_id": session_id,
@@ -472,7 +530,8 @@ async def live_audio_websocket(websocket: WebSocket):
                         "message": result["message"],
                         "tool_call": result.get("tool_call"),
                         "tool_args": result.get("tool_args", {}),
-                        "language": result.get("language", "Hinglish")
+                        "language": result.get("language", "Hinglish"),
+                        "checklist": result.get("checklist")
                     }))
     except WebSocketDisconnect:
         pass

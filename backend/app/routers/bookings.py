@@ -335,6 +335,14 @@ async def reserve_test_drive_slot(
     v_info = CatalogService.get_vehicle_by_id(req.vehicle_id)
     vehicle_display_name = v_info.name if v_info else "Mahindra Thar ROXX"
 
+    # Resolve advisor checklist from request or customer profile or notes
+    from app.services.checklist_service import ChecklistService
+    lead_checklist = req.advisor_checklist or customer.advisor_checklist
+    if req.notes:
+        extracted = ChecklistService.extract_checklist_items(req.notes, req.vehicle_id, lead_checklist)
+        if extracted:
+            lead_checklist = extracted
+
     booking = TestDriveBooking(
         booking_reference=booking_ref,
         customer_id=customer.id,
@@ -349,8 +357,11 @@ async def reserve_test_drive_slot(
         scheduled_date=req.slot_date,
         scheduled_time_slot=req.slot_time,
         status="CONFIRMED",
-        notes=req.notes
+        notes=req.notes,
+        advisor_checklist=lead_checklist
     )
+    if lead_checklist:
+        customer.advisor_checklist = lead_checklist
     db.add(booking)
 
     # 8. Log interaction turn
@@ -405,6 +416,38 @@ async def reserve_test_drive_slot(
     )
 
 
+@router.get("/my-bookings", response_model=List[TestDriveBookingResponse])
+async def list_my_bookings(
+    customer_id: Optional[str] = None,
+    phone: Optional[str] = None,
+    status: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(TestDriveBooking)
+    if customer_id:
+        c_stmt = select(Customer).where((Customer.customer_id == customer_id) | (Customer.id == customer_id if customer_id.isdigit() else False))
+        c_res = await db.execute(c_stmt)
+        cust = c_res.scalars().first()
+        if cust:
+            stmt = stmt.where(TestDriveBooking.customer_id == cust.id)
+        else:
+            return []
+    elif phone:
+        normalized_phone = clean_phone(phone)
+        c_stmt = select(Customer).where((Customer.phone == normalized_phone) | (Customer.phone == phone))
+        c_res = await db.execute(c_stmt)
+        cust = c_res.scalars().first()
+        if cust:
+            stmt = stmt.where(TestDriveBooking.customer_id == cust.id)
+        else:
+            return []
+    if status:
+        stmt = stmt.where(TestDriveBooking.status == status)
+
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
 @router.get("", response_model=List[TestDriveBookingResponse])
 async def list_bookings(
     customer_id: Optional[int] = None,
@@ -436,7 +479,22 @@ async def create_booking(
     booking_in: TestDriveBookingCreate,
     db: AsyncSession = Depends(get_db)
 ):
-    customer = await CustomerService.get_customer_by_phone(db, booking_in.customer_phone)
+    customer = None
+    if booking_in.customer_phone:
+        customer = await CustomerService.get_customer_by_phone(db, booking_in.customer_phone)
+    if not customer and booking_in.customer_id:
+        customer = await CustomerService.get_customer_by_id(db, booking_in.customer_id)
+        if not customer:
+            customer = Customer(
+                customer_id=booking_in.customer_id,
+                name=booking_in.customer_name or "Valued Customer",
+                phone=f"+91 98{abs(hash(booking_in.customer_id)) % 100000000:08d}",
+                city="Mumbai",
+                interested_vehicle_id=booking_in.vehicle_id
+            )
+            db.add(customer)
+            await db.commit()
+            await db.refresh(customer)
     if not customer:
         customer = await CustomerService.get_or_create_default_customer(db)
 
@@ -444,6 +502,13 @@ async def create_booking(
     dealers = CatalogService.get_dealerships()
     d_match = next((d for d in dealers if d.id == booking_in.dealership_id), dealers[0])
     advisor = d_match.available_advisors[0] if d_match.available_advisors else "Rajesh Varma"
+
+    from app.services.checklist_service import ChecklistService
+    chk = booking_in.advisor_checklist or customer.advisor_checklist
+    if booking_in.notes:
+        extracted = ChecklistService.extract_checklist_items(booking_in.notes, booking_in.vehicle_id, chk)
+        if extracted:
+            chk = extracted
 
     booking = TestDriveBooking(
         booking_reference=booking_ref,
@@ -459,8 +524,11 @@ async def create_booking(
         scheduled_date=booking_in.scheduled_date,
         scheduled_time_slot=booking_in.scheduled_time_slot,
         status="CONFIRMED",
-        notes=booking_in.notes
+        notes=booking_in.notes,
+        advisor_checklist=chk
     )
+    if chk:
+        customer.advisor_checklist = chk
 
     db.add(booking)
     await db.commit()

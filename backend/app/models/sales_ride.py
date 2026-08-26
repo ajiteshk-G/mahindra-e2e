@@ -10,6 +10,7 @@ class TestRideRecording(Base):
     session_id = Column(String(64), unique=True, index=True, nullable=False) # e.g. "TR-2026-AARAV-881"
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     booking_id = Column(Integer, ForeignKey("test_drive_bookings.id"), nullable=True)
+    booking_reference = Column(String(64), index=True, nullable=True)
     
     # Vehicle and Advisor
     vehicle_id = Column(String(64), nullable=False, default="thar_roxx")

@@ -410,3 +410,9 @@ class CatalogService:
     @staticmethod
     def get_dealerships() -> List[DealershipItem]:
         return MAHINDRA_DEALERSHIPS
+
+    @staticmethod
+    def get_static_checklist(vehicle_id: Optional[str] = None) -> List[str]:
+        from app.services.checklist_service import ChecklistService
+        return ChecklistService.get_static_checklist(vehicle_id)
+

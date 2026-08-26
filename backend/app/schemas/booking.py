@@ -3,9 +3,11 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict
 
 class TestDriveBookingCreate(BaseModel):
-    customer_id: str
-    vehicle_id: str
-    variant: str
+    customer_id: Optional[str] = "CUST-9820155432"
+    customer_phone: Optional[str] = None
+    customer_name: Optional[str] = None
+    vehicle_id: str = "thar_roxx"
+    variant: str = "AX7L Diesel AT 4x4"
     color: Optional[str] = "Stealth Black"
     dealership_id: Optional[str] = "bayview_bandra"
     booking_type: Optional[str] = "HOME_DOORSTEP"
@@ -13,6 +15,8 @@ class TestDriveBookingCreate(BaseModel):
     scheduled_date: str
     scheduled_time_slot: str
     notes: Optional[str] = None
+    advisor_checklist: Optional[list[str]] = None
+    advisor_checklist: Optional[list[str]] = None
 
 class TestDriveBookingResponse(BaseModel):
     id: int
@@ -30,6 +34,9 @@ class TestDriveBookingResponse(BaseModel):
     scheduled_time_slot: str
     status: str
     notes: Optional[str] = None
+    advisor_checklist: Optional[list[str]] = None
+    advisor_checklist: Optional[list[str]] = None
+    is_custom_checklist: Optional[bool] = False
     created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
@@ -71,6 +78,7 @@ class SlotReserveRequest(BaseModel):
     delivery_address: Optional[str] = None
     pin_code: Optional[str] = None
     notes: Optional[str] = None
+    advisor_checklist: Optional[list[str]] = None
 
 
 class SlotReserveResponse(BaseModel):

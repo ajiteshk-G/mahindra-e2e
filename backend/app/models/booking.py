@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -25,6 +25,7 @@ class TestDriveBooking(Base):
     
     status = Column(String(32), default="CONFIRMED") # CONFIRMED, COMPLETED, CANCELLED
     notes = Column(Text, nullable=True)
+    advisor_checklist = Column(JSON, nullable=True) # Dynamic checklist items from pre-sales
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

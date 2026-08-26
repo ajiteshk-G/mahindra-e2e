@@ -145,35 +145,72 @@ async def get_admin_bookings(
 
         # B. Fetch In-Vehicle Test Ride Recording & Audio Transcript (Blank by default until recorded)
         test_ride_turns = []
+        test_ride_sessions = []
         sentiment_score = None
         purchase_intent = None
         loved_features = []
         objections = []
         advisor_feedback = None
+        recommended_action = None
+        gcs_recording_uri = None
 
         if cust_id:
             tr_stmt = (
                 select(TestRideRecording)
-                .where(TestRideRecording.customer_id == cust_id)
+                .where(
+                    (TestRideRecording.booking_id == b.id) |
+                    (TestRideRecording.booking_reference == b.booking_reference) |
+                    (TestRideRecording.customer_id == cust_id)
+                )
                 .order_by(desc(TestRideRecording.created_at))
             )
             tr_res = await db.execute(tr_stmt)
-            tr_rec = tr_res.scalars().first()
-            if tr_rec:
-                sentiment_score = tr_rec.customer_sentiment_score
-                purchase_intent = tr_rec.purchase_intent_score
-                loved_features = tr_rec.loved_features or []
-                objections = tr_rec.objections_raised or []
-                advisor_feedback = tr_rec.advisor_coaching_feedback
+            all_tr_recs = tr_res.scalars().all()
+            
+            for tr_rec in all_tr_recs:
+                if sentiment_score is None:
+                    sentiment_score = tr_rec.customer_sentiment_score
+                    purchase_intent = tr_rec.purchase_intent_score
+                    loved_features = tr_rec.loved_features or []
+                    objections = tr_rec.objections_raised or []
+                    advisor_feedback = tr_rec.advisor_coaching_feedback
+                    recommended_action = tr_rec.recommended_action
+                    gcs_recording_uri = tr_rec.gcs_uri
+
+                sess_turns = []
                 if tr_rec.transcript:
-                    for line in tr_rec.transcript.split("\n"):
+                    for line in tr_rec.transcript.strip().split("\n"):
                         if ":" in line:
                             spk, msg = line.split(":", 1)
-                            test_ride_turns.append({
+                            spk_clean = spk.strip().strip("[]0123456789: ")
+                            msg_clean = msg.strip().strip('"')
+                            is_cust = "customer" in spk_clean.lower() or cust_name.lower() in spk_clean.lower()
+                            turn_dict = {
                                 "speaker": spk.strip(),
-                                "message": msg.strip(),
+                                "role": "customer" if is_cust else "sales_advisor",
+                                "message": msg_clean,
                                 "timestamp": tr_rec.created_at.strftime("%I:%M %p, %d %b") if tr_rec.created_at else ""
-                            })
+                            }
+                            sess_turns.append(turn_dict)
+                            if len(test_ride_turns) < 30:
+                                test_ride_turns.append(turn_dict)
+
+                test_ride_sessions.append({
+                    "session_id": tr_rec.session_id,
+                    "booking_reference": tr_rec.booking_reference or b.booking_reference,
+                    "gcs_uri": tr_rec.gcs_uri,
+                    "vehicle_name": tr_rec.vehicle_name,
+                    "sales_advisor_name": tr_rec.sales_advisor_name,
+                    "duration_seconds": tr_rec.duration_seconds,
+                    "sentiment_score": tr_rec.customer_sentiment_score,
+                    "purchase_intent": tr_rec.purchase_intent_score,
+                    "loved_features": tr_rec.loved_features or [],
+                    "objections_raised": tr_rec.objections_raised or [],
+                    "advisor_coaching_feedback": tr_rec.advisor_coaching_feedback,
+                    "recommended_action": tr_rec.recommended_action,
+                    "turns": sess_turns,
+                    "created_at": tr_rec.created_at.strftime("%Y-%m-%d %H:%M:%S") if tr_rec.created_at else ""
+                })
 
         # Vehicle display name
         v_info = CatalogService.get_vehicle_by_id(b.vehicle_id)
@@ -208,7 +245,10 @@ async def get_admin_bookings(
             "purchase_intent": purchase_intent,
             "loved_features": loved_features,
             "objections_raised": objections,
-            "advisor_coaching_feedback": advisor_feedback
+            "advisor_coaching_feedback": advisor_feedback,
+            "recommended_action": recommended_action,
+            "gcs_recording_uri": gcs_recording_uri,
+            "test_ride_sessions": test_ride_sessions
         }
         admin_records.append(record)
 

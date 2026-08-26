@@ -96,6 +96,8 @@ export interface TestRideLeadItem {
   booking_status: string;
   scheduled_slot?: string;
   presales_notes?: string;
+  advisor_checklist?: string[];
+  is_custom_checklist?: boolean;
 }
 
 export interface TestRideInsightResponse {

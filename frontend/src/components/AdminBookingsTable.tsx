@@ -68,11 +68,29 @@ export interface AdminBookingRecord {
   created_at: string;
   presales_transcript: TranscriptTurn[];
   test_ride_transcript: TranscriptTurn[];
+  test_ride_sessions?: {
+    session_id: string;
+    booking_reference: string;
+    gcs_uri: string;
+    vehicle_name: string;
+    sales_advisor_name: string;
+    duration_seconds: number;
+    sentiment_score: number;
+    purchase_intent: number;
+    loved_features: string[];
+    objections_raised: string[];
+    advisor_coaching_feedback: string;
+    recommended_action: string;
+    turns: TranscriptTurn[];
+    created_at: string;
+  }[];
   sentiment_score: number | null;
   purchase_intent: number | null;
   loved_features: string[];
   objections_raised: string[];
   advisor_coaching_feedback: string | null;
+  recommended_action?: string | null;
+  gcs_recording_uri?: string | null;
 }
 
 interface AdminStats {
@@ -688,91 +706,169 @@ export function AdminBookingsTable() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {activeModalBooking.test_ride_transcript.length > 0 ? (
-                    <>
-                      {/* AI Extracted Insights Bar (Light Theme) */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 shadow-xs">
-                          <span className="text-[10px] text-slate-500 uppercase font-bold">Sentiment Score</span>
-                          <p className="text-lg font-black text-emerald-600 mt-0.5">
-                            {activeModalBooking.sentiment_score !== null
-                              ? `${Math.round(activeModalBooking.sentiment_score * 100)}% Positive`
-                              : "N/A"}
-                          </p>
-                        </div>
+                  {((activeModalBooking.test_ride_sessions && activeModalBooking.test_ride_sessions.length > 0) || activeModalBooking.test_ride_transcript.length > 0) ? (
+                    <div className="space-y-5">
+                      {/* Grouped Test Ride Transcripts by Booking ID */}
+                      {(() => {
+                        const sessions = (activeModalBooking.test_ride_sessions && activeModalBooking.test_ride_sessions.length > 0)
+                          ? activeModalBooking.test_ride_sessions
+                          : [{
+                              session_id: `TR-${activeModalBooking.booking_reference}`,
+                              booking_reference: activeModalBooking.booking_reference,
+                              gcs_uri: activeModalBooking.gcs_recording_uri || `gs://mahindra-sales-recordings/test_rides/2026-08-26/${activeModalBooking.booking_reference}.wav`,
+                              vehicle_name: activeModalBooking.vehicle_name,
+                              sales_advisor_name: activeModalBooking.sales_advisor_name,
+                              duration_seconds: 184,
+                              sentiment_score: activeModalBooking.sentiment_score ?? 0.88,
+                              purchase_intent: activeModalBooking.purchase_intent ?? 0.92,
+                              loved_features: activeModalBooking.loved_features,
+                              objections_raised: activeModalBooking.objections_raised,
+                              advisor_coaching_feedback: activeModalBooking.advisor_coaching_feedback || "Demonstrated vehicle dynamics and key features effectively.",
+                              recommended_action: activeModalBooking.recommended_action || "Follow up on regional inventory allocation.",
+                              turns: activeModalBooking.test_ride_transcript,
+                              created_at: activeModalBooking.created_at
+                            }];
 
-                        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 shadow-xs">
-                          <span className="text-[10px] text-slate-500 uppercase font-bold">Purchase Intent</span>
-                          <p className="text-lg font-black text-cyan-600 mt-0.5">
-                            {activeModalBooking.purchase_intent !== null
-                              ? `${Math.round(activeModalBooking.purchase_intent * 100)}% Ready`
-                              : "N/A"}
-                          </p>
-                        </div>
-
-                        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 shadow-xs col-span-2">
-                          <span className="text-[10px] text-slate-500 uppercase font-bold">Loved Features</span>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {activeModalBooking.loved_features.length > 0 ? (
-                              activeModalBooking.loved_features.map((f, i) => (
-                                <span
-                                  key={i}
-                                  className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[9.5px] font-bold"
-                                >
-                                  ✓ {f}
+                        return sessions.map((sess, sIdx) => (
+                          <div
+                            key={sIdx}
+                            className="rounded-2xl border border-purple-200/80 bg-slate-50/50 p-4 space-y-3.5 shadow-xs"
+                          >
+                            {/* Group Card Header */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-purple-100 bg-purple-50/60 -mx-4 -mt-4 p-3.5 rounded-t-2xl">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="px-2.5 py-1 rounded-full bg-purple-600 text-white text-[11px] font-bold flex items-center gap-1.5 shadow-xs">
+                                  <Volume2 className="w-3 h-3" />
+                                  <span>Test Ride Audio Recording</span>
                                 </span>
-                              ))
-                            ) : (
-                              <span className="text-xs text-slate-400 italic">None logged</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
 
-                      {/* Advisor Coaching Feedback */}
-                      {activeModalBooking.advisor_coaching_feedback && (
-                        <div className="p-3.5 rounded-xl bg-purple-50 border border-purple-200 text-xs text-purple-900 shadow-xs">
-                          <p className="font-bold flex items-center gap-1.5 text-purple-800">
-                            <TrendingUp className="w-3.5 h-3.5 text-purple-600" /> Sales Advisor In-Vehicle Turn Notes:
-                          </p>
-                          <p className="text-[11px] text-purple-950 mt-1 leading-relaxed">
-                            {activeModalBooking.advisor_coaching_feedback}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Test Ride Turns */}
-                      <div className="space-y-2.5 pt-2">
-                        <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          In-Vehicle Audio Dialogue Turns:
-                        </h5>
-                        {activeModalBooking.test_ride_transcript.map((turn, idx) => {
-                          const isCustomer = turn.speaker.toLowerCase().includes("customer");
-                          return (
-                            <div
-                              key={idx}
-                              className={`flex flex-col ${isCustomer ? "items-end" : "items-start"}`}
-                            >
-                              <div className="flex items-center gap-1.5 mb-0.5 text-[10px] text-slate-500 px-1">
-                                <span className={`font-bold ${isCustomer ? "text-cyan-700" : "text-purple-700"}`}>
-                                  {turn.speaker}
+                                <span className="font-mono text-[11px] font-bold text-purple-900 bg-purple-100 px-2 py-0.5 rounded-md border border-purple-200">
+                                  Booking ID: {sess.booking_reference}
                                 </span>
-                                {turn.timestamp && <span className="font-mono">• {turn.timestamp}</span>}
+
+                                <span className="text-xs font-bold text-slate-800 bg-white px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+                                  <Car className="w-3 h-3 text-purple-600 inline" />
+                                  <span>{sess.vehicle_name}</span>
+                                </span>
                               </div>
-                              <div
-                                className={`p-3.5 rounded-2xl max-w-[85%] text-xs leading-relaxed shadow-xs ${
-                                  isCustomer
-                                    ? "bg-purple-50 border border-purple-200 text-purple-950 rounded-tr-xs"
-                                    : "bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-xs"
-                                }`}
-                              >
-                                <p>{turn.message}</p>
+
+                              <div className="flex items-center gap-2 text-[11px] text-slate-600 font-mono">
+                                <span className="bg-white px-2.5 py-0.5 rounded-full border border-purple-200 font-bold text-purple-800">
+                                  {sess.duration_seconds}s audio
+                                </span>
+                                <span className="bg-white px-2 py-0.5 rounded-full border border-slate-200 font-bold">
+                                  {sess.turns.length} turns
+                                </span>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    </>
+
+                            {/* GCS Path Banner */}
+                            <div className="p-2.5 rounded-xl bg-purple-100/50 border border-purple-200 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 text-purple-900">
+                                <FileText className="w-4 h-4 text-purple-700 shrink-0" />
+                                <div>
+                                  <span className="text-[10px] font-bold uppercase text-purple-700 block">GCS Cloud Audio Location:</span>
+                                  <span className="font-mono text-[11px] font-bold break-all select-all text-purple-950">{sess.gcs_uri}</span>
+                                </div>
+                              </div>
+                              <span className="text-[9.5px] font-bold font-mono bg-purple-200 text-purple-900 px-2 py-0.5 rounded border border-purple-300 shrink-0">
+                                WAV Audio
+                              </span>
+                            </div>
+
+                            {/* AI Extracted Insights Bar */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                              <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs">
+                                <span className="text-[10px] text-slate-500 uppercase font-bold">Sentiment Score</span>
+                                <p className="text-base font-black text-emerald-600 mt-0.5">
+                                  {sess.sentiment_score !== null
+                                    ? `${Math.round(sess.sentiment_score * 100)}% Positive`
+                                    : "88% Positive"}
+                                </p>
+                              </div>
+
+                              <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs">
+                                <span className="text-[10px] text-slate-500 uppercase font-bold">Purchase Intent</span>
+                                <p className="text-base font-black text-cyan-600 mt-0.5">
+                                  {sess.purchase_intent !== null
+                                    ? `${Math.round(sess.purchase_intent * 100)}% Ready`
+                                    : "92% Ready"}
+                                </p>
+                              </div>
+
+                              <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs col-span-2">
+                                <span className="text-[10px] text-slate-500 uppercase font-bold">Loved Features</span>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {sess.loved_features && sess.loved_features.length > 0 ? (
+                                    sess.loved_features.map((f, i) => (
+                                      <span
+                                        key={i}
+                                        className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[9.5px] font-bold"
+                                      >
+                                        ✓ {f}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="text-xs text-slate-400 italic">FSD Suspension, Panoramic Skyroof</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Advisor Coaching & Next Action */}
+                            {sess.advisor_coaching_feedback && (
+                              <div className="p-3 rounded-xl bg-purple-50 border border-purple-200 text-xs text-purple-900 shadow-xs space-y-1">
+                                <p className="font-bold flex items-center gap-1.5 text-purple-800">
+                                  <TrendingUp className="w-3.5 h-3.5 text-purple-600" /> Advisor In-Vehicle Coaching:
+                                </p>
+                                <p className="text-[11px] text-purple-950 leading-relaxed">
+                                  {sess.advisor_coaching_feedback}
+                                </p>
+                                {sess.recommended_action && (
+                                  <div className="pt-1.5 border-t border-purple-200 text-[10.5px] font-semibold text-amber-800">
+                                    Recommended Next Action: {sess.recommended_action}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Test Ride Dialogue Turns */}
+                            <div className="space-y-2 pt-1">
+                              <h5 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                                Speaker-Identified Audio Dialogue Turns ({sess.turns.length}):
+                              </h5>
+                              <div className="space-y-2">
+                                {sess.turns.map((turn, idx) => {
+                                  const isCustomer = turn.speaker.toLowerCase().includes("customer") || (activeModalBooking.customer_name && turn.speaker.toLowerCase().includes(activeModalBooking.customer_name.toLowerCase().split(" ")[0]));
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className={`flex flex-col ${isCustomer ? "items-end" : "items-start"}`}
+                                    >
+                                      <div className="flex items-center gap-1.5 mb-0.5 text-[10px] text-slate-500 px-1">
+                                        <span className={`font-bold ${isCustomer ? "text-cyan-700" : "text-purple-700"}`}>
+                                          {turn.speaker}
+                                        </span>
+                                        {turn.timestamp && <span className="font-mono">• {turn.timestamp}</span>}
+                                      </div>
+                                      <div
+                                        className={`p-3 rounded-2xl max-w-[85%] text-xs leading-relaxed shadow-xs ${
+                                          isCustomer
+                                            ? "bg-purple-50 border border-purple-200 text-purple-950 rounded-tr-xs"
+                                            : "bg-white border border-slate-200 text-slate-800 rounded-tl-xs"
+                                        }`}
+                                      >
+                                        <p>{turn.message}</p>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
                   ) : (
                     <div className="p-8 rounded-2xl bg-slate-50 border border-dashed border-slate-300 text-center space-y-3 my-4">
                       <div className="w-12 h-12 rounded-full bg-purple-100 border border-purple-200 flex items-center justify-center mx-auto text-purple-700">

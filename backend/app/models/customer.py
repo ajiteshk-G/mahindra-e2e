@@ -22,6 +22,7 @@ class Customer(Base):
     interested_vehicle_id = Column(String(64), default="thar_roxx")
     interested_variant = Column(String(64), default="AX7L Diesel AT 4x4")
     budget_range = Column(String(64), nullable=True)
+    advisor_checklist = Column(JSON, nullable=True) # Pre-sales inquiry demo items
     
     # Showroom & KYC persistence
     pan_number = Column(String(32), nullable=True)
