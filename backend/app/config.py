@@ -4,8 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Mahindra Intelligent Assistant (MIA) with Kabir AI"
     API_V1_STR: str = "/api"
-    VERTEX_PROJECT_ID: str = os.getenv("VERTEX_PROJECT_ID", "mb-poc-352009")
-    VERTEX_LOCATION: str = os.getenv("VERTEX_LOCATION", "us-central1")
+    VERTEX_PROJECT_ID: str = os.getenv("VERTEX_PROJECT_ID", os.getenv("PROJECT_ID", "mb-poc-352009"))
+    VERTEX_LOCATION: str = os.getenv("VERTEX_LOCATION", os.getenv("LOCATION", "us-central1"))
     
     # Live Bidi WebSocket Configuration (gemini-live-api-dev skill & mahindra-car-live-chat)
     GEMINI_LIVE_MODEL: str = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.1-flash-live-preview-04-2026")
@@ -22,10 +22,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./mahindra_omnichannel.db")
     WS_LIVE_AUDIO_PATH: str = "/ws/live-audio"
     DEFAULT_DEALERSHIP: str = "Bayview Mahindra, Bandra West, Mumbai"    
-    # SMS Dispatch Configuration (Chargeable - Disabled by default)
-    ENABLE_SMS_DISPATCH: bool = os.getenv("ENABLE_SMS_DISPATCH", "false").lower() in ("true", "1", "yes")
-
     
-    model_config = SettingsConfigDict(case_sensitive=True)
+    # SMS Dispatch Configuration (Configurable via Cloud Run environment variable)
+    ENABLE_SMS_DISPATCH: bool = os.getenv("ENABLE_SMS_DISPATCH", "true").lower() in ("true", "1", "yes")
+
+    model_config = SettingsConfigDict(case_sensitive=True, extra="allow")
 
 settings = Settings()
