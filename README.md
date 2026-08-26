@@ -4,67 +4,67 @@ An enterprise-grade omnichannel automotive platform for **Mahindra & Mahindra**,
 
 ---
 
-## 🚗 Omnichannel Architecture & Stages
+## 🎬 3-Part End-to-End Demo Flow
+
+The demo is divided into **3 distinct parts**:
+
+### 1. PreSales — Website Journey
+- A prospective customer arrives at the Mahindra website and initiates an **interactive real-time Audio Chat** with the AI Agent (Kabir).
+- The customer explores vehicles, asks specific questions regarding specifications, variants, safety ratings, and performance.
+- The AI Agent opens an **interactive calendar widget embedded directly inside the chat window**, allowing the customer to select their preferred date, time slot, and dealership to book a seamless Test Ride.
+- As the customer chats, Gemini automatically extracts their key interests and requirements (e.g. *Panoramic Skyroof*, *Level 2 ADAS*, *Ventilated Seats*) to build a customized Demo Checklist.
+
+### 2. Sales Mobile App — In-Vehicle Test Ride & Real-Time Intelligence
+- The Test Ride booking instantly syncs to the **Sales Consultant's Mobile App** as a new active CRM Lead.
+- The **complete pre-sales call transcript** and the **custom Demo Checklist** (dynamically derived from the audio conversation between Avatar and Customer) appear on screen for the Sales Consultant (*Rajesh Varma*).
+- During the drive inside the car, the Sales Consultant **records or simulates the live test drive conversation** (covering engine acceleration, FSD suspension, safety features, competitor comparisons vs Kia, and flexible financing options).
+- The platform uses Gemini to analyze the in-vehicle conversation and generates **real-time AI insights**:
+  - Customer Sentiment Score & Purchase Intent Score (dynamically evaluated).
+  - Advisor Pitch Score & Sales Coaching feedback.
+  - Loved Features & Objections Raised.
+- The lead status automatically updates to **`TestRide_Completed`** and persists in the database.
+
+### 3. Outbound Call — Post-Ride Customer Feedback & Resolution
+- In the Admin Console / CRM Dashboard, leads marked as `TestRide_Completed` display an **Outbound Feedback Call** option.
+- An Outbound Call is triggered via **Browser Voice (Gemini Live AI)** or **Direct Phone Call (Twilio Carrier)**.
+- The AI Agent takes the in-vehicle test ride transcript as context, asking the customer:
+  - How their test drive was.
+  - If Sales Consultant Rajesh Varma answered all their questions thoroughly.
+- The Agent operates under **strict Mahindra domain guardrails** (deflecting competitor or off-topic queries back to Mahindra excellence) and provisionally confirms fast-track priority vehicle allocation.
+
+---
+
+## 🚗 Omnichannel Process Architecture
 
 ```
    ┌─────────────────────────────────────────────────────────────┐
-   │          Stage 1: Pre-Sales Virtual Showroom                │
-   │  • Kabir AI Multimodal Live Avatar (Video + Audio)          │
+   │          Part 1: Pre-Sales Website Journey                  │
+   │  • Kabir AI Multimodal Live Audio Chat + Video Avatar       │
    │  • Synchronized Co-Browsing Tool Calling                    │
    │  • Dynamic Feature Checklist Extraction from Customer Chat  │
-   │  • Interactive Test Drive Booking with Dealership DMS       │
+   │  • Test Drive Booking with Embedded In-Chat Calendar Widget │
    └──────────────────────────────┬──────────────────────────────┘
                                   │
                                   ▼
    ┌─────────────────────────────────────────────────────────────┐
-   │          Stage 2: Sales Consultant Mobile App               │
-   │  • Real-Time Lead Ingestion with Extracted Checklists       │
-   │  • In-Vehicle Test Ride Audio Capture / Simulated Script    │
-   │  • Gemini Dynamic Audio Evaluation (Sentiment / Intent /    │
-   │    Advisor Pitch Score & Coaching Feedback)                 │
+   │          Part 2: Sales Mobile App & Test Ride               │
+   │  • Test Ride Booking Appears as CRM Lead with Call Transcript│
+   │  • Dynamic Demo Checklist on Screen for Sales Consultant    │
+   │  • In-Vehicle Test Drive Audio Recording / Simulation       │
+   │  • Gemini Dynamic Audio Insights (Sentiment, Pitch Score)   │
    │  • Lead Status Updates to 'TestRide_Completed'              │
    └──────────────────────────────┬──────────────────────────────┘
                                   │
                                   ▼
    ┌─────────────────────────────────────────────────────────────┐
-   │          Stage 3: Outbound Feedback Call & Admin Console    │
-   │  • Admin Console Table with Outbound Voice Call Trigger     │
+   │          Part 3: Outbound Feedback Call & Admin Console     │
+   │  • Trigger Outbound Voice Call for 'TestRide_Completed' Leads│
    │  • Dual-Mode: Browser Call (Gemini Live) & Twilio Carrier   │
-   │  • Context Injection: In-Vehicle Transcript & Loved Features│
-   │  • Strict Mahindra Domain Boundaries & Objection Resolution │
+   │  • In-Vehicle Transcript Context & Advisor Review           │
+   │  • Strict Mahindra Domain Guardrails & Objection Resolution │
    │  • Priority Fast-Track Allocation Confirmation              │
    └─────────────────────────────────────────────────────────────┘
 ```
-
----
-
-## 🌟 Key Capabilities
-
-### 1. Pre-Sales Virtual Showroom & Kabir Live Avatar
-- **Bidirectional Live Audio/Video Stream**: Powered by Vertex AI Gemini Live API (`gemini-3.1-flash-live-preview-04-2026` / `gemini-2.5-flash`) over WebSockets (16kHz mono PCM).
-- **Synchronized UI Co-Browsing**: Gemini tool calling triggers real-time UI viewport updates:
-  - Vehicle spotlights across 12 authentic and Born Electric models (Thar ROXX, Scorpio-N, XUV700, BE 6e, XEV 9e, XUV400 EV Pro).
-  - Side-by-side spec comparison matrix.
-  - Test drive scheduling modal with real-time slot reservation.
-- **Dynamic Feature Checklist**: Automatically detects customer interests (e.g., *Panoramic Sunroof*, *ADAS Level 2*, *Ventilated Seats*) and builds an advisor checklist attached to the booking lead.
-- **Customer Persistence**: Stores profile data, lead history, and full past conversation transcripts.
-
-### 2. Sales Consultant Mobile App & Test Ride Audio Intelligence
-- **Mobile Sales Portal**: Designed for on-the-go dealership sales consultants (e.g., *Rajesh Varma*).
-- **In-Vehicle Audio Recording & Simulation**: Captures live audio or runs a natural Hindi/Hinglish test ride conversation inside the Mahindra XUV700/Thar ROXX covering 2.0L mStallion engine power, FSD suspension, AdrenoX dual screens, and safety.
-- **Gemini Dynamic Analytics**: Evaluates real-time audio transcripts to generate:
-  - Customer Sentiment Score & Purchase Intent Score.
-  - Advisor Pitch Score & Sales Coaching Recommendations.
-  - Loved Features & Raised Objections.
-- **State Progression**: Updates lead booking status to `TestRide_Completed` and persists insights.
-
-### 3. Proactive Post-Ride Outbound Voice Call
-- **Admin Console (Column 8 Trigger)**: Enables dealership managers to launch an outbound call for any lead with `TestRide_Completed` status.
-- **Dual Calling Options**:
-  - **Browser Call (Gemini Live AI)**: Real-time interactive voice dialogue via WebSocket.
-  - **Twilio Phone Call (Live Carrier)**: Automated phone call to the customer's mobile number.
-- **Context Injection**: Dynamically injects actual in-vehicle test ride transcript and loved features, asking if the customer enjoyed the ride and if Sales Consultant Rajesh answered all queries.
-- **Strict Mahindra Guardrails**: Strictly declines off-topic or competitor car discussions (e.g., Tata Safari, Kia Seltos) and redirects the conversation back to Mahindra excellence.
 
 ---
 
@@ -115,33 +115,4 @@ cd frontend
 npm install
 npm run build   # Verify TypeScript and static builds
 npm run dev     # Starts Next.js dev server on http://localhost:3000
-```
-
----
-
-## 📁 Repository Structure
-
-```
-.
-├── Dockerfile                  # Unified multi-stage container build
-├── entrypoint.sh               # Starts FastAPI backend (8000) & Next.js frontend (8080)
-├── README.md                   # Project documentation
-├── backend/
-│   ├── app/
-│   │   ├── config.py           # Settings and env var parsing (ENABLE_SMS_DISPATCH, etc.)
-│   │   ├── database.py         # SQLAlchemy async engine and session management
-│   │   ├── main.py             # FastAPI entrypoint and router registration
-│   │   ├── models/             # Booking, Customer, Dealership, Sales Ride & Outbound models
-│   │   ├── routers/            # Health, Catalog, Customer, Bookings, Sales, Outbound, Admin, WS
-│   │   ├── schemas/            # Pydantic request & response schemas
-│   │   └── services/           # Gemini Live, Sales Recording, Outbound Call, Catalog services
-│   └── tests/                  # Pytest test suite (18 automated unit and integration tests)
-└── frontend/
-    ├── src/
-    │   ├── app/                # Next.js App Router (layout.tsx, page.tsx, /admin)
-    │   ├── components/         # PreSalesShowroom, SalesMobileApp, OutboundCallSimulator, AdminTable...
-    │   ├── hooks/              # useLiveVoice WebSocket audio streaming hook
-    │   ├── lib/                # API client, default vehicle catalog, smart compare helper
-    │   └── types/              # TypeScript domain types and API contracts
-    └── tailwind.config.ts      # Mahindra red & slate automotive design system
 ```

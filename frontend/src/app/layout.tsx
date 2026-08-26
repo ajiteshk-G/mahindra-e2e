@@ -1,20 +1,5 @@
 import type { Metadata } from "next";
-import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
-
-const outfit = Outfit({
-  subsets: ["latin"],
-  variable: "--font-heading",
-  display: "swap",
-  weight: ["300", "400", "500", "600", "700", "800", "900"],
-});
-
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  variable: "--font-body",
-  display: "swap",
-  weight: ["400", "500", "600", "700", "800"],
-});
 
 export const metadata: Metadata = {
   title: "Mahindra Auto — Explore SUVs & Born Electric Origins with MIA Live Avatar",
@@ -27,8 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${outfit.variable} ${plusJakarta.variable}`}>
-      <body className="bg-slate-50 text-slate-900 antialiased selection:bg-red-600 selection:text-white min-h-screen font-sans">
+    <html lang="en">
+      <body className="bg-slate-50 text-slate-900 antialiased selection:bg-red-600 selection:text-white min-h-screen">
         {children}
       </body>
     </html>
