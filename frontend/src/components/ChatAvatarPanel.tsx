@@ -62,20 +62,44 @@ export function ChatAvatarPanel({
   const [isVerified, setIsVerified] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
 
-  // Auto open calendar on test drive intent
+  // Open calendar widget ONLY when customer agrees or explicitly requests to book a test drive
   useEffect(() => {
     if (messages.length > 0) {
       const lastMsg = messages[messages.length - 1];
-      const lower = (lastMsg.text || "").toLowerCase();
-      if (
-        lastMsg.toolCall === "book_test_drive" ||
-        lastMsg.toolCall === "open_test_drive_booking" ||
-        lower.includes("test drive") ||
-        lower.includes("test ride") ||
-        lower.includes("book drive") ||
-        lower.includes("book a test")
-      ) {
+      const lastText = (lastMsg.text || "").trim();
+      const prevMsg = messages.length > 1 ? messages[messages.length - 2] : null;
+
+      // 1. Explicit tool call triggered by Gemini when booking is initiated
+      if (lastMsg.toolCall === "book_test_drive" || lastMsg.toolCall === "open_test_drive_booking") {
         setShowCalendar(true);
+        return;
+      }
+
+      // 2. Direct customer request to book
+      if (lastMsg.speaker === "customer") {
+        const isDirectBookingRequest =
+          /\b(book|schedule|reserve)\s+(a\s+)?(test\s+(drive|ride)|slot)\b/i.test(lastText) ||
+          /\b(want|like|ready)\s+to\s+(book|take|schedule)\s+(a\s+)?(test\s+(drive|ride)|slot)\b/i.test(lastText) ||
+          /\b(test\s+(drive|ride))\s+(book|karna|chahiye|kara\s+do)\b/i.test(lastText);
+
+        if (isDirectBookingRequest) {
+          setShowCalendar(true);
+          return;
+        }
+
+        // 3. Customer agreement response to Kabir's invitation
+        if (prevMsg && prevMsg.speaker === "mia") {
+          const prevOfferedTestDrive =
+            /(test\s+(drive|ride)|book\s+(a\s+)?drive|slot|schedule)/i.test(prevMsg.text);
+          const customerAgreed =
+            /^(yes|yeah|yep|sure|ok|okay|please|definitely|let'?s\s+do\s+it|book\s+it|ha|haan|zaroor|bilkul|proceed)\b/i.test(lastText) ||
+            /\b(yes\s+please|book\s+it|schedule\s+it|let'?s\s+book)\b/i.test(lastText);
+
+          if (prevOfferedTestDrive && customerAgreed) {
+            setShowCalendar(true);
+            return;
+          }
+        }
       }
     }
   }, [messages]);
