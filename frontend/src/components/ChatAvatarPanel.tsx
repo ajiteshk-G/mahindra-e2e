@@ -55,13 +55,19 @@ export function ChatAvatarPanel({
   initialCustomerPhone = "",
   activeVehicleId = "thar_roxx"
 }: ChatAvatarPanelProps) {
-  const [name, setName] = useState(initialCustomerName || "Kunal Mathuria");
-  const [phone, setPhone] = useState(initialCustomerPhone || "9820155432");
+  const [name, setName] = useState(initialCustomerName || "");
+  const [phone, setPhone] = useState(initialCustomerPhone || "");
   const [nameError, setNameError] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [touched, setTouched] = useState({ name: false, phone: false });
-  const [isVerified, setIsVerified] = useState(true);
+  const [isVerified, setIsVerified] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
+
+  // Sync initial props if provided
+  useEffect(() => {
+    if (initialCustomerName) setName(initialCustomerName);
+    if (initialCustomerPhone) setPhone(initialCustomerPhone);
+  }, [initialCustomerName, initialCustomerPhone]);
 
   // Open calendar widget when customer asks for a test ride/drive or agrees to book
   useEffect(() => {
@@ -138,7 +144,7 @@ export function ChatAvatarPanel({
     const cleaned = val.replace(/[\s-]/g, "");
     if (!cleaned) return "Mobile number is required";
     if (!PHONE_REGEX.test(cleaned)) {
-      return "Please enter a valid 10-digit mobile number (e.g. 9820155432)";
+      return "Please enter a valid 10-digit mobile number (e.g. 9154920275)";
     }
     return "";
   };
@@ -317,9 +323,9 @@ export function ChatAvatarPanel({
 
       {/* Pre-Chat Registration Form (Shown when not yet verified) */}
       {!isVerified && messages.length === 0 && !isRecording ? (
-        <div className="flex-1 p-5 flex flex-col justify-center bg-gradient-to-b from-[#101726]/90 to-[#0B0F17]/95 overflow-y-auto animate-in fade-in duration-300">
-          <div className="text-center mb-5">
-            <div className="relative w-16 h-16 mx-auto mb-3">
+        <div className="flex-1 p-6 flex flex-col justify-between overflow-y-auto bg-gradient-to-b from-[#101726]/95 via-[#0D1322] to-[#0B0F17] animate-in fade-in duration-300">
+          <div className="text-center mb-3">
+            <div className="relative w-14 h-14 mx-auto mb-2.5">
               <div className="w-full h-full rounded-full p-0.5 bg-gradient-to-tr from-red-600 via-red-500 to-cyan-400 shadow-[0_0_25px_rgba(227,24,55,0.45)]">
                 <img
                   src="/avatars/jay.png"
@@ -327,36 +333,36 @@ export function ChatAvatarPanel({
                   className="w-full h-full object-cover rounded-full"
                 />
               </div>
-              <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-emerald-500 border-2 border-[#0B0F17] flex items-center justify-center">
+              <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-[#0B0F17] flex items-center justify-center">
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
               </span>
             </div>
 
-            <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center justify-center gap-1.5">
+            <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center justify-center gap-1.5">
               <span>Connect with Kabir AI</span>
             </h3>
-            <p className="text-xs text-slate-300 mt-1 max-w-[280px] mx-auto leading-relaxed">
+            <p className="text-[11px] text-slate-300 mt-1 max-w-[280px] mx-auto leading-relaxed font-normal">
               Enter your details below to unlock your interactive live voice consultation with Mahindra's AI Showroom Specialist.
             </p>
           </div>
 
-          <form onSubmit={handleStartConsultation} className="space-y-4 max-w-[320px] mx-auto w-full">
+          <form onSubmit={handleStartConsultation} className="space-y-3.5 max-w-[340px] mx-auto w-full">
             {/* Quick Demo Fill Option */}
-            <div className="flex items-center justify-between bg-white/[0.03] border border-white/10 rounded-lg p-2">
+            <div className="flex items-center justify-between bg-white/[0.04] border border-white/10 rounded-xl p-2.5">
               <div className="text-[10px] text-slate-300">
-                <span className="font-bold text-white">Demo Profile</span>: Kunal Mathuria
+                <span className="font-bold text-white">Demo Profile</span>: Ajitesh Kumar
               </div>
               <button
                 type="button"
                 onClick={() => {
-                  setName("Kunal Mathuria");
-                  setPhone("9820155432");
+                  setName("Ajitesh Kumar");
+                  setPhone("9154920275");
                   setNameError("");
                   setPhoneError("");
                   setTouched({ name: true, phone: true });
                 }}
-                className="text-[10px] font-bold text-cyan-300 hover:text-white bg-cyan-900/50 hover:bg-cyan-800/70 border border-cyan-500/40 px-2 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer shadow-sm active:scale-95"
-                title="Fill dummy details: Kunal Mathuria (+91 98201 55432)"
+                className="text-[10px] font-bold text-cyan-300 hover:text-white bg-cyan-950/80 hover:bg-cyan-900/90 border border-cyan-500/40 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer shadow-sm active:scale-95"
+                title="Fill dummy details: Ajitesh Kumar (+91 91549 20275)"
               >
                 <Sparkles className="w-2.5 h-2.5 text-amber-300" />
                 <span>Auto Fill</span>
@@ -364,13 +370,13 @@ export function ChatAvatarPanel({
             </div>
 
             <div>
-              <label className="block text-[10.5px] font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+              <label className="block text-[10.5px] font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-cyan-400" /> Full Name
                 </span>
                 {touched.name && !nameError && name.trim().length >= 2 && (
-                  <span className="text-emerald-400 text-[10px] flex items-center gap-1 font-mono">
-                    <CheckCircle2 className="w-3 h-3" /> Valid
+                  <span className="text-emerald-400 text-[10px] flex items-center gap-1 font-mono font-bold">
+                    <CheckCircle2 className="w-3 h-3" /> Valid Name
                   </span>
                 )}
               </label>
@@ -387,30 +393,30 @@ export function ChatAvatarPanel({
                   setTouched((prev) => ({ ...prev, name: true }));
                   setNameError(validateName(name));
                 }}
-                placeholder="e.g. Rahul Sharma"
+                placeholder="e.g. Ajitesh Kumar"
                 className={`w-full bg-[#151D2C] border rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-all ${
                   touched.name && nameError
                     ? "border-red-500 ring-1 ring-red-500/40 bg-red-950/20"
                     : touched.name && !nameError && name.trim().length >= 2
-                    ? "border-emerald-500/70 bg-emerald-950/20 focus:border-emerald-400"
+                    ? "border-emerald-500/70 bg-emerald-950/20 focus:border-emerald-400 ring-1 ring-emerald-500/20"
                     : "border-white/10 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40"
                 }`}
               />
               {touched.name && nameError && (
-                <p className="text-[10px] text-red-400 mt-1 flex items-center gap-1 animate-in fade-in">
+                <p className="text-[10px] text-red-400 mt-1 flex items-center gap-1 animate-in fade-in font-medium">
                   <AlertCircle className="w-3 h-3 shrink-0" /> {nameError}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="block text-[10.5px] font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+              <label className="block text-[10.5px] font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <Phone className="w-3.5 h-3.5 text-cyan-400" /> Mobile Number
                 </span>
                 {touched.phone && !phoneError && phone.trim().length === 10 && (
-                  <span className="text-emerald-400 text-[10px] flex items-center gap-1 font-mono">
-                    <CheckCircle2 className="w-3 h-3" /> Valid
+                  <span className="text-emerald-400 text-[10px] flex items-center gap-1 font-mono font-bold">
+                    <CheckCircle2 className="w-3 h-3" /> Valid Mobile
                   </span>
                 )}
               </label>
@@ -433,18 +439,18 @@ export function ChatAvatarPanel({
                     setTouched((prev) => ({ ...prev, phone: true }));
                     setPhoneError(validatePhone(phone));
                   }}
-                  placeholder="98201 55432"
+                  placeholder="91549 20275"
                   className={`w-full bg-[#151D2C] border rounded-xl pl-16 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none transition-all ${
                     touched.phone && phoneError
                       ? "border-red-500 ring-1 ring-red-500/40 bg-red-950/20"
                       : touched.phone && !phoneError && phone.trim().length === 10
-                      ? "border-emerald-500/70 bg-emerald-950/20 focus:border-emerald-400"
+                      ? "border-emerald-500/70 bg-emerald-950/20 focus:border-emerald-400 ring-1 ring-emerald-500/20"
                       : "border-white/10 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40"
                   }`}
                 />
               </div>
               {touched.phone && phoneError && (
-                <p className="text-[10px] text-red-400 mt-1 flex items-center gap-1 animate-in fade-in">
+                <p className="text-[10px] text-red-400 mt-1 flex items-center gap-1 animate-in fade-in font-medium">
                   <AlertCircle className="w-3 h-3 shrink-0" /> {phoneError}
                 </p>
               )}
@@ -453,7 +459,7 @@ export function ChatAvatarPanel({
             <button
               type="submit"
               disabled={!isFormValid}
-              className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all mt-3 cursor-pointer ${
+              className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all mt-2 cursor-pointer ${
                 isFormValid
                   ? "bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white shadow-[0_8px_25px_rgba(227,24,55,0.45)] hover:scale-[1.02] active:scale-98"
                   : "bg-white/5 text-slate-500 border border-white/5 cursor-not-allowed opacity-60"
@@ -464,7 +470,7 @@ export function ChatAvatarPanel({
             </button>
           </form>
 
-          <div className="mt-5 pt-4 border-t border-white/10 max-w-[320px] mx-auto w-full text-[10.5px] text-slate-400 space-y-2">
+          <div className="mt-3 pt-3 border-t border-white/10 max-w-[340px] mx-auto w-full text-[10.5px] text-slate-400 space-y-1.5">
             <div className="flex items-center gap-2 text-slate-300">
               <span className="text-emerald-400 font-bold">✓</span>
               <span>Real-time Voice Consultation in 13+ Indian Languages</span>
@@ -476,7 +482,7 @@ export function ChatAvatarPanel({
           </div>
         </div>
       ) : (
-        <>
+        <div className="avatar-content-stage flex-1 p-3 flex flex-col gap-2.5 min-h-0 overflow-hidden">
           {/* Avatar & Customer Dual Video Communication Stage */}
           <div
             id="video-preview-container"
@@ -761,7 +767,7 @@ export function ChatAvatarPanel({
           </button>
         </div>
       </div>
-    </>
+    </div>
   )}
 </aside>
   );
