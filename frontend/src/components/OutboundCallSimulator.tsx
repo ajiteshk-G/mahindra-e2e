@@ -451,13 +451,10 @@ export function OutboundCallSimulator({
                     </p>
                   </div>
 
-                  <button
-                    onClick={onProceedToFinancing}
-                    className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-950/60"
-                  >
-                    <span>Proceed to Stage 4: Instant Financing</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
+                  <div className="w-full py-2.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold rounded-2xl text-xs flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Test Ride Completed & Allocation Locked</span>
+                  </div>
 
                   <button
                     onClick={handleStartOutboundCall}
