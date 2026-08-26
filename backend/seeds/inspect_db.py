@@ -1,6 +1,9 @@
-import asyncio
+import os
 import sys
-sys.path.insert(0, "/usr/local/google/home/ajiteshk/Desktop/e2e-auto/backend")
+import asyncio
+
+# Add backend directory to sys.path dynamically
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select

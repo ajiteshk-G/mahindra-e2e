@@ -1,7 +1,10 @@
-import asyncio
+import os
 import sys
+import asyncio
 import logging
-sys.path.insert(0, "/usr/local/google/home/ajiteshk/Desktop/e2e-auto/backend")
+
+# Add backend directory to sys.path dynamically
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -30,6 +33,8 @@ async def clean_database():
             "outbound_call_logs",
             "test_ride_recordings",
             "test_drive_bookings",
+            "test_drive_slots",
+            "conversation_transcripts",
             "interaction_logs",
             "conversation_sessions",
             "claims",
