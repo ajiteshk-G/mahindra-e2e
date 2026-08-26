@@ -101,7 +101,7 @@ FEATURE_KEYWORDS: List[Dict[str, Any]] = [
         }
     },
     {
-        "keywords": ["sound", "audio", "speaker", "music", "sony", "harman", "dolby", "kardon", "bass"],
+        "keywords": ["sound", "audio", "speaker", "speakers", "music", "sony", "harman", "dolby", "kardon", "bass", "subwoofer", "sound system", "audio system", "tweeter"],
         "item": {
             "thar_roxx": "Showcase Harman Kardon 9-Speaker Audio System with QuantumLogic Surround Sound",
             "scorpio_n": "Showcase Sony 12-Speaker 3D Immersive Audio with Subwoofer",
@@ -130,7 +130,7 @@ FEATURE_KEYWORDS: List[Dict[str, Any]] = [
         }
     },
     {
-        "keywords": ["screen", "display", "cockpit", "touchscreen", "apple", "carplay", "android", "infotainment", "navigation", "instrument cluster"],
+        "keywords": ["screen", "display", "digital display", "twin screen", "dual screen", "cockpit", "touchscreen", "apple", "carplay", "android", "infotainment", "navigation", "instrument cluster", "superscreen", "cluster", "dashboard screen"],
         "item": {
             "thar_roxx": "Demonstrate Dual 10.25-inch HD Cockpit Displays with Wireless Apple CarPlay & Android Auto",
             "be_6e": "Demonstrate Triple Horizon Cockpit Displays, AR Head-Up Display & AdrenoX OS",

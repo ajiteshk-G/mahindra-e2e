@@ -44,8 +44,10 @@ export class GeminiLiveClient {
 
     // 2. Determine WebSocket URL (direct to backend port 8000 on localhost)
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    const host = isLocal ? "127.0.0.1:8000" : window.location.host;
+    const hostname = window.location.hostname;
+    const port = window.location.port;
+    const isDev = port === "3000" || hostname === "localhost" || hostname === "127.0.0.1";
+    const host = isDev ? `${hostname}:8000` : window.location.host;
 
     const queryParams = new URLSearchParams({
       mode: "outbound_call",

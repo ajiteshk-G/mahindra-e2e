@@ -54,6 +54,7 @@ class TestRideLeadItem(BaseModel):
     email: Optional[str] = None
     city: str
     preferred_vehicle: str
+    vehicle_name: Optional[str] = None
     vehicle_id: Optional[str] = "thar_roxx"
     variant: Optional[str] = "AX7L Diesel AT 4x4"
     booking_reference: Optional[str] = None

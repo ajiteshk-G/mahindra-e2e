@@ -235,123 +235,126 @@ async def live_audio_websocket(websocket: WebSocket):
                 active_voice = "Aoede" if is_outbound else (settings.AVATAR_VOICE or "orus")
                 active_modality = "AUDIO" if is_outbound else (settings.AVATAR_MODALITY or "VIDEO")
 
-                setup_msg = {
-                    "setup": {
-                        "model": f"projects/{used_project}/locations/{settings.VERTEX_LOCATION}/publishers/google/models/{settings.GEMINI_LIVE_MODEL}",
-                        "generationConfig": {
-                            "responseModalities": [active_modality],
-                            "speechConfig": {
-                                "voiceConfig": {
-                                    "prebuiltVoiceConfig": {
-                                        "voiceName": active_voice
-                                    }
-                                },
-                                "languageCode": "hi-IN"
-                            }
-                        },
-                        "inputAudioTranscription": {},
-                        "outputAudioTranscription": {},
-                        "avatarConfig": {
-                            "avatarName": "Jay"
-                        },
-                        "tools": [
+                # Talk to Kabir uses Gemini Live Avatar (Jay); Outbound call uses Plain Gemini Live (Aoede)
+                tools_config = [
+                    {
+                        "functionDeclarations": [
                             {
-                                "functionDeclarations": [
-                                    {
-                                        "name": "lock_priority_allocation",
-                                        "description": "Call this tool when the customer agrees to lock fast-track 12-day vehicle delivery allocation.",
-                                        "parameters": {
-                                            "type": "object",
-                                            "properties": {
-                                                "variant": {"type": "string"},
-                                                "allocation_days": {"type": "integer"}
-                                            },
-                                            "required": ["variant"]
-                                        }
-                                    }
-                                ]
+                                "name": "lock_priority_allocation",
+                                "description": "Call this tool when the customer agrees to lock fast-track 12-day vehicle delivery allocation.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "variant": {"type": "string"},
+                                        "allocation_days": {"type": "integer"}
+                                    },
+                                    "required": ["variant"]
+                                }
                             }
-                        ] if is_outbound else [
-                            {
-                                "functionDeclarations": [
-                                    {
-                                        "name": "switch_vehicle_showroom",
-                                        "description": "Call this tool to switch the showroom backdrop, hero stage, and vehicle carousel whenever the customer asks about, compares, or mentions any Mahindra SUV or vehicle model (e.g. thar_roxx, scorpio_n, xuv700, be_6e, xev_9e, xuv_3xo, thar_3door, scorpio_classic, bolero_neo, bolero_neo_plus, bolero, xuv400_ev, marazzo).",
-                                        "parameters": {
-                                            "type": "object",
-                                            "properties": {
-                                                "car_name": {
-                                                    "type": "string",
-                                                    "description": "The normalized ID: thar_roxx, scorpio_n, xuv700, be_6e, xev_9e, xuv_3xo, thar_3door, scorpio_classic, bolero_neo, bolero_neo_plus, bolero, xuv400_ev, marazzo"
-                                                }
-                                            },
-                                            "required": ["car_name"]
-                                        }
-                                    },
-                                    {
-                                        "name": "compare_vehicles",
-                                        "description": "Call this tool when customer wants to compare vehicles.",
-                                        "parameters": {
-                                            "type": "object",
-                                            "properties": {
-                                                "vehicle_id_1": {"type": "string"},
-                                                "vehicle_id_2": {"type": "string"}
-                                            },
-                                            "required": ["vehicle_id_1", "vehicle_id_2"]
-                                        }
-                                    },
-                                    {
-                                        "name": "update_advisor_checklist",
-                                        "description": "Call this tool to add personalized demo points to the Sales Advisor Demo Checklist in database whenever customer inquires about features, comfort, safety, or tech.",
-                                        "parameters": {
-                                            "type": "object",
-                                            "properties": {
-                                                "vehicle_id": {"type": "string"},
-                                                "checklist_items": {
-                                                    "type": "array",
-                                                    "items": {"type": "string"}
-                                                }
-                                            },
-                                            "required": ["checklist_items"]
-                                        }
-                                    },
-                                    {
-                                        "name": "book_test_drive",
-                                        "description": "Call this tool when customer wants to schedule or book a test drive for a specific vehicle model and variant.",
-                                        "parameters": {
-                                            "type": "object",
-                                            "properties": {
-                                                "model_name": {
-                                                    "type": "string",
-                                                    "description": "The normalized vehicle ID: thar_roxx, scorpio_n, xuv700, be_6e, xev_9e, xuv_3xo, thar_3door, scorpio_classic"
-                                                },
-                                                "variant": {
-                                                    "type": "string",
-                                                    "description": "Specific variant name e.g. AX7L Diesel AT 4x4, Z8L 4WD AT, Pack Two (79 kWh)"
-                                                },
-                                                "transmission": {
-                                                    "type": "string",
-                                                    "description": "Automatic or Manual"
-                                                },
-                                                "booking_type": {
-                                                    "type": "string",
-                                                    "description": "HOME_DOORSTEP or SHOWROOM_VISIT"
-                                                },
-                                                "pin_code": {
-                                                    "type": "string",
-                                                    "description": "Area 6-digit PIN code"
-                                                }
-                                            },
-                                            "required": ["model_name"]
-                                        }
-                                    }
-                                ]
-                            }
-                        ],
-                        "systemInstruction": {
-                            "parts": [{"text": active_system_prompt}]
-                        }
+                        ]
                     }
+                ] if is_outbound else [
+                    {
+                        "functionDeclarations": [
+                            {
+                                "name": "switch_vehicle_showroom",
+                                "description": "Call this tool to switch the showroom backdrop, hero stage, and vehicle carousel whenever the customer asks about, compares, or mentions any Mahindra SUV or vehicle model (e.g. thar_roxx, scorpio_n, xuv700, be_6e, xev_9e, xuv_3xo, thar_3door, scorpio_classic, bolero_neo, bolero_neo_plus, bolero, xuv400_ev, marazzo).",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "car_name": {
+                                            "type": "string",
+                                            "description": "The normalized ID: thar_roxx, scorpio_n, xuv700, be_6e, xev_9e, xuv_3xo, thar_3door, scorpio_classic, bolero_neo, bolero_neo_plus, bolero, xuv400_ev, marazzo"
+                                        }
+                                    },
+                                    "required": ["car_name"]
+                                }
+                            },
+                            {
+                                "name": "compare_vehicles",
+                                "description": "Call this tool when customer wants to compare vehicles.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "vehicle_id_1": {"type": "string"},
+                                        "vehicle_id_2": {"type": "string"}
+                                    },
+                                    "required": ["vehicle_id_1", "vehicle_id_2"]
+                                }
+                            },
+                            {
+                                "name": "update_advisor_checklist",
+                                "description": "Call this tool to add personalized demo points to the Sales Advisor Demo Checklist in database whenever customer inquires about features, comfort, safety, or tech.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "vehicle_id": {"type": "string"},
+                                        "checklist_items": {
+                                            "type": "array",
+                                            "items": {"type": "string"}
+                                        }
+                                    },
+                                    "required": ["checklist_items"]
+                                }
+                            },
+                            {
+                                "name": "book_test_drive",
+                                "description": "Call this tool when customer wants to schedule or book a test drive for a specific vehicle model and variant.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "model_name": {
+                                            "type": "string",
+                                            "description": "The normalized vehicle ID: thar_roxx, scorpio_n, xuv700, be_6e, xev_9e, xuv_3xo, thar_3door, scorpio_classic"
+                                        },
+                                        "variant": {
+                                            "type": "string",
+                                            "description": "Specific variant name e.g. AX7L Diesel AT 4x4, Z8L 4WD AT, Pack Two (79 kWh)"
+                                        },
+                                        "transmission": {
+                                            "type": "string",
+                                            "description": "Automatic or Manual"
+                                        },
+                                        "booking_type": {
+                                            "type": "string",
+                                            "description": "HOME_DOORSTEP or SHOWROOM_VISIT"
+                                        },
+                                        "pin_code": {
+                                            "type": "string",
+                                            "description": "Area 6-digit PIN code"
+                                        }
+                                    },
+                                    "required": ["model_name"]
+                                }
+                            }
+                        ]
+                    }
+                ]
+
+                setup_dict = {
+                    "model": f"projects/{used_project}/locations/{settings.VERTEX_LOCATION}/publishers/google/models/{settings.GEMINI_LIVE_MODEL}",
+                    "generationConfig": {
+                        "responseModalities": [active_modality],
+                        "speechConfig": {
+                            "voiceConfig": {
+                                "prebuiltVoiceConfig": {
+                                    "voiceName": active_voice
+                                }
+                            }
+                        }
+                    },
+                    "inputAudioTranscription": {},
+                    "outputAudioTranscription": {},
+                    "tools": tools_config,
+                    "systemInstruction": {
+                        "parts": [{"text": active_system_prompt}]
+                    }
+                }
+                if not is_outbound:
+                    setup_dict["avatarConfig"] = {"avatarName": settings.AVATAR_NAME or "Jay"}
+
+                setup_msg = {
+                    "setup": setup_dict
                 }
                 await bidi_ws.send(json.dumps(setup_msg))
 
@@ -411,6 +414,26 @@ async def live_audio_websocket(websocket: WebSocket):
                                     elif msg_type == "USER_CHAT":
                                         user_text = payload.get("text", "")
                                         if user_text:
+                                            # Real-time persistence of customer turns & checklist extraction
+                                            async with AsyncSessionLocal() as db_sess:
+                                                await CustomerService.log_interaction(
+                                                    db_sess,
+                                                    customer_id_str=customer.customer_id,
+                                                    speaker="customer",
+                                                    message=user_text,
+                                                    channel="VOICE_LIVE",
+                                                    session_id_str=session_id
+                                                )
+                                                from app.services.checklist_service import ChecklistService
+                                                veh_k = session_mgr.active_vehicle_id or customer.interested_vehicle_id or "thar_roxx"
+                                                new_chk = ChecklistService.extract_checklist_items(user_text, vehicle_id=veh_k)
+                                                if new_chk:
+                                                    await ChecklistService.update_customer_and_booking_checklist(
+                                                        db_sess,
+                                                        customer_id_str=customer.customer_id,
+                                                        vehicle_id=veh_k,
+                                                        new_items=new_chk
+                                                    )
                                             bidi_turn = {
                                                 "clientContent": {
                                                     "turns": [
@@ -504,10 +527,30 @@ async def live_audio_websocket(websocket: WebSocket):
 
                                 in_trans = server_content.get("inputTranscription")
                                 if in_trans and in_trans.get("text"):
+                                    speech_txt = in_trans["text"]
+                                    async with AsyncSessionLocal() as db_sess:
+                                        await CustomerService.log_interaction(
+                                            db_sess,
+                                            customer_id_str=customer.customer_id,
+                                            speaker="customer",
+                                            message=speech_txt,
+                                            channel="VOICE_LIVE",
+                                            session_id_str=session_id
+                                        )
+                                        from app.services.checklist_service import ChecklistService
+                                        veh_k = session_mgr.active_vehicle_id or customer.interested_vehicle_id or "thar_roxx"
+                                        new_chk = ChecklistService.extract_checklist_items(speech_txt, vehicle_id=veh_k)
+                                        if new_chk:
+                                            await ChecklistService.update_customer_and_booking_checklist(
+                                                db_sess,
+                                                customer_id_str=customer.customer_id,
+                                                vehicle_id=veh_k,
+                                                new_items=new_chk
+                                            )
                                     await websocket.send_text(json.dumps({
                                         "type": "USER_TRANSCRIPTION",
                                         "speaker": "customer",
-                                        "message": in_trans["text"]
+                                        "message": speech_txt
                                     }))
 
                                 # 3. Process Video, Audio, and Text parts

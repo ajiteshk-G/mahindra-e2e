@@ -39,7 +39,10 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
     videoOutputManagerRef.current = new LiveVideoOutputManager();
   }, []);
 
-  const playAudioGreeting = useCallback((customGreeting?: string, customerName?: string) => {
+  const playAudioGreeting = useCallback(async (customGreeting?: string, customerName?: string) => {
+    if (audioOutputManagerRef.current) {
+      await audioOutputManagerRef.current.initializeAudioContext();
+    }
     // Send prompt to Gemini Live WebSocket if connected
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(
@@ -67,16 +70,17 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
       return process.env.NEXT_PUBLIC_WS_URL;
     }
 
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const hostname = window.location.hostname;
-    // Direct WebSocket is only supported on direct local loopback (port 8000).
-    // In web preview / proxy / remote environments, we use HTTP REST streaming fallback to avoid browser connection errors.
-    const isLocalLoopback = hostname === "localhost" || hostname === "127.0.0.1";
-    if (!isLocalLoopback) {
-      return null;
+    const port = window.location.port;
+
+    // Route to backend port 8000 when frontend runs on port 3000 in dev / cloudtop
+    if (port === "3000" || hostname === "localhost" || hostname === "127.0.0.1") {
+      return `${protocol}//${hostname}:8000/ws/live-audio`;
     }
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${protocol}//127.0.0.1:8000/ws/live-audio`;
+    // On Cloud Run container deployment, connect to the same host
+    return `${protocol}//${window.location.host}/ws/live-audio`;
   };
 
   const connectWebSocket = useCallback(() => {
@@ -328,6 +332,10 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
   };
 
   const startVoiceRecording = async (customerName?: string, customerPhone?: string, vehicleId?: string) => {
+    // Resume / initialize audio output context on user gesture
+    if (audioOutputManagerRef.current) {
+      await audioOutputManagerRef.current.initializeAudioContext();
+    }
     if (customerName || customerPhone || vehicleId) {
       customerInfoRef.current = {
         name: customerName || customerInfoRef.current.name,

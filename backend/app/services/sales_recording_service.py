@@ -1,3 +1,4 @@
+from app.services.cache_service import cache
 import os
 import uuid
 import json
@@ -58,10 +59,14 @@ class SalesRecordingService:
     @staticmethod
     async def get_sales_leads(db: AsyncSession, dealership_id: Optional[str] = None) -> List[TestRideLeadItem]:
         """
-        Fetch qualified leads for the Sales Mobile App.
+        Fetch qualified leads for the Sales Mobile App with fast TTL caching.
         Strictly 1 lead row per unique customer (identified by unique normalized phone number).
         Shows the customer's latest active test ride booking.
         """
+        cache_key = f"sales_leads_{dealership_id or 'all'}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
         booking_stmt = select(TestDriveBooking).order_by(TestDriveBooking.created_at.desc())
         if dealership_id and dealership_id.strip() and dealership_id.strip() != "ALL":
             booking_stmt = booking_stmt.where(
@@ -74,10 +79,18 @@ class SalesRecordingService:
         leads: List[TestRideLeadItem] = []
         seen_phones = set()
 
+        # Batch prefetch Customers and Recordings to eliminate N+1 latency
+        customer_ids = list({b.customer_id for b in bookings})
+        cust_map = {}
+        if customer_ids:
+            cust_res = await db.execute(select(Customer).where(Customer.id.in_(customer_ids)))
+            cust_map = {c.id: c for c in cust_res.scalars().all()}
+
+        rec_res = await db.execute(select(TestRideRecording.booking_reference, TestRideRecording.customer_id))
+        existing_rec_refs = {r[0] for r in rec_res.all() if r[0]}
+
         for b in bookings:
-            cust_stmt = select(Customer).where(Customer.id == b.customer_id)
-            c_res = await db.execute(cust_stmt)
-            c = c_res.scalars().first()
+            c = cust_map.get(b.customer_id)
 
             cust_name = c.name if c else "Valued Customer"
             cust_phone = c.phone if c else ""
@@ -98,14 +111,7 @@ class SalesRecordingService:
             is_custom = bool(db_checklist and len(db_checklist) > 0)
             final_checklist = db_checklist if is_custom else CatalogService.get_static_checklist(b.vehicle_id)
 
-            # Check if this booking has an existing test ride recording
-            tr_rec_stmt = select(TestRideRecording).where(
-                (TestRideRecording.booking_reference == b.booking_reference) |
-                (TestRideRecording.booking_id == b.id) |
-                (TestRideRecording.customer_id == b.customer_id)
-            )
-            tr_res = await db.execute(tr_rec_stmt)
-            has_tr_rec = tr_res.scalars().first() is not None
+            has_tr_rec = b.booking_reference in existing_rec_refs
 
             resolved_status = "TestRide_Completed" if (b.status == "TestRide_Completed" or has_tr_rec) else (b.status or "CONFIRMED")
 
@@ -116,6 +122,7 @@ class SalesRecordingService:
                 email=cust_email,
                 city=cust_city,
                 preferred_vehicle=f"{veh_name} ({b.variant})",
+                vehicle_name=veh_name,
                 vehicle_id=b.vehicle_id,
                 variant=b.variant,
                 booking_reference=b.booking_reference,
@@ -168,10 +175,13 @@ class SalesRecordingService:
                         is_custom_checklist=is_custom
                     ))
 
+        cache.set(cache_key, leads, ttl_seconds=60)
         return leads
 
     @staticmethod
     async def process_and_store_recording(db: AsyncSession, req: TestRideRecordingUploadRequest) -> TestRideRecording:
+        # Invalidate leads cache on new recording upload
+        cache.invalidate("sales_leads_")
         """
         Saves test ride audio recording at:
         gs://mahindra-sales-recordings/test_rides/<date>/<booking_reference>.wav

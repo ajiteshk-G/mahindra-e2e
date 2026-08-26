@@ -84,9 +84,9 @@ async def save_outbound_call_transcript(
             formatted_lines.append(f"[{tm}] {spk}: \"{txt.strip()}\"")
 
     if not formatted_lines:
-        formatted_lines.append('[00:02] Kavya AI: \"Namaste Kunal ji! Main Mahindra se Kavya baat kar rahi hoon. Aapka XUV700 ka test drive kaisa raha?\"')
-        formatted_lines.append('[00:15] Kunal Mathuria: \"Drive bahut acchi thi, Sunil ji ne suspension aur skyroof acche se samjhaya.\"')
-        formatted_lines.append('[00:28] Kavya AI: \"Bahut badhiya! Humne aapka 12-day fast-track priority allocation confirm kar diya hai.\"')
+        c_name = customer.name if customer else (req.customer_name or "Valued Customer")
+        v_name = req.vehicle_name or "Mahindra SUV"
+        formatted_lines.append(f'[00:02] Kavya AI: "Namaste {c_name} ji! Main Mahindra se Kavya baat kar rahi hoon. Aapka {v_name} ka test drive kaisa raha?"')
 
     full_transcript = "\n".join(formatted_lines)
 

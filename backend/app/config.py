@@ -19,13 +19,13 @@ class Settings(BaseSettings):
     AVATAR_MODALITY: str = os.getenv("AVATAR_MODALITY", "VIDEO") # Real-time avatar video stream
     DEFAULT_LOCALE: str = os.getenv("DEFAULT_LOCALE", "hi-IN") # Multilingual
     
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./mahindra_omnichannel.db")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:MahindraDev2026!Secure@34.42.54.228:5432/mahindra_auto")
     WS_LIVE_AUDIO_PATH: str = "/ws/live-audio"
     DEFAULT_DEALERSHIP: str = "Bayview Mahindra, Bandra West, Mumbai"    
     
     # SMS Dispatch Configuration (Configurable via Cloud Run environment variable)
     ENABLE_SMS_DISPATCH: bool = os.getenv("ENABLE_SMS_DISPATCH", "true").lower() in ("true", "1", "yes")
 
-    model_config = SettingsConfigDict(case_sensitive=True, extra="allow")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="allow")
 
 settings = Settings()

@@ -335,13 +335,21 @@ async def reserve_test_drive_slot(
     v_info = CatalogService.get_vehicle_by_id(req.vehicle_id)
     vehicle_display_name = v_info.name if v_info else "Mahindra Thar ROXX"
 
-    # Resolve advisor checklist from request or customer profile or notes
+    # Resolve advisor checklist from request, customer profile, interaction history, or notes
     from app.services.checklist_service import ChecklistService
     lead_checklist = req.advisor_checklist or customer.advisor_checklist
+    if not lead_checklist or len(lead_checklist) == 0:
+        i_stmt = select(InteractionLog).where(InteractionLog.customer_id == customer.id)
+        i_res = await db.execute(i_stmt)
+        customer_dialogues = " ".join([l.message for l in i_res.scalars().all() if l.speaker == "customer"])
+        if customer_dialogues:
+            lead_checklist = ChecklistService.extract_checklist_items(customer_dialogues, req.vehicle_id)
     if req.notes:
         extracted = ChecklistService.extract_checklist_items(req.notes, req.vehicle_id, lead_checklist)
         if extracted:
             lead_checklist = extracted
+    if not lead_checklist or len(lead_checklist) == 0:
+        lead_checklist = ChecklistService.get_static_checklist(req.vehicle_id)
 
     booking = TestDriveBooking(
         booking_reference=booking_ref,

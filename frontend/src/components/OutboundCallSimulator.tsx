@@ -50,24 +50,7 @@ export interface OutboundLeadItem {
   has_feedback_call?: boolean;
 }
 
-const DEFAULT_COMPLETED_LEADS: OutboundLeadItem[] = [
-  {
-    booking_reference: "BK-MAH-23382",
-    customer_id: "CUST-9819657034",
-    customer_name: "Kunal Mathuria",
-    customer_phone: "+91 98196 57034",
-    customer_city: "Mumbai",
-    vehicle_name: "Mahindra XUV700 AX7L Diesel AWD AT",
-    variant: "AX7L Diesel AWD",
-    dealership_name: "Bayview Mahindra, Bandra West",
-    sales_advisor_name: "Rajesh Varma (Senior Specialist)",
-    session_id: "BK-MAH-23382",
-    status: "TestRide_Completed",
-    loved_features: ["FSD Suspension", "Panoramic Skyroof", "AdrenoX Dual 10.25 screens", "mHawk Diesel Power"],
-    objections_raised: ["Delivery timeline (10 weeks)", "Rear seat recline comfort"],
-    has_feedback_call: false
-  }
-];
+const DEFAULT_COMPLETED_LEADS: OutboundLeadItem[] = [];
 
 interface OutboundCallSimulatorProps {
   profile?: CustomerProfile | null;
@@ -79,9 +62,9 @@ export function OutboundCallSimulator({
   testRideInsights
 }: OutboundCallSimulatorProps) {
   // Leads List
-  const [leads, setLeads] = useState<OutboundLeadItem[]>(DEFAULT_COMPLETED_LEADS);
+  const [leads, setLeads] = useState<OutboundLeadItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedLead, setSelectedLead] = useState<OutboundLeadItem>(DEFAULT_COMPLETED_LEADS[0]);
+  const [selectedLead, setSelectedLead] = useState<OutboundLeadItem | null>(null);
 
   // Egress Option: "browser" vs "twilio"
   const [EgressMode, setEgressMode] = useState<"browser" | "twilio">("browser");
@@ -106,68 +89,55 @@ export function OutboundCallSimulator({
 
   const geminiClientRef = useRef<GeminiLiveClient | null>(null);
 
-  // Load bookings from API and check sessionStorage
+  // Load authentic completed test drive bookings directly from Cloud SQL database
   useEffect(() => {
     async function loadData() {
-
+      // Clean up any legacy sessionStorage
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("mahindra_selected_outbound_lead");
+      }
 
       try {
         const rawBookings = await fetchAdminBookings();
         const bookingsList = Array.isArray(rawBookings) ? rawBookings : (rawBookings?.bookings || []);
         if (Array.isArray(bookingsList) && bookingsList.length > 0) {
-          const completed = bookingsList
-            .filter((b: any) => b.status === "TestRide_Completed")
+          const completed: OutboundLeadItem[] = bookingsList
+            .filter((b: any) => b.status === "TestRide_Completed" || (b.test_ride_sessions && b.test_ride_sessions.length > 0))
             .map((b: any) => ({
               booking_reference: b.booking_reference,
               customer_id: b.customer_id,
               customer_name: b.customer_name,
               customer_phone: b.customer_phone,
-              customer_city: b.customer_city,
+              customer_city: b.customer_city || "Mumbai",
               vehicle_name: b.vehicle_name,
               variant: b.variant,
               dealership_name: b.dealership_name,
-              sales_advisor_name: b.sales_advisor_name,
-              session_id: b.booking_reference || b.test_ride_sessions?.[0]?.booking_reference || "BK-MAH-23382",
-              status: b.status,
-              loved_features: b.loved_features || ["FSD Suspension", "Skyroof"],
-              objections_raised: b.objections_raised || ["Delivery timeline"],
+              sales_advisor_name: b.sales_advisor_name || "Mahindra Sales Consultant",
+              session_id: b.test_ride_sessions?.[0]?.session_id || b.booking_reference,
+              status: "TestRide_Completed",
+              loved_features: b.loved_features || [],
+              objections_raised: b.objections_raised || [],
               has_feedback_call: b.outbound_sessions && b.outbound_sessions.length > 0
             }));
 
           if (completed.length > 0) {
             setLeads(completed);
             setSelectedLead(completed[0]);
-            setTwilioPhoneNumber(completed[0].customer_phone);
+            if (completed[0].customer_phone) {
+              setTwilioPhoneNumber(completed[0].customer_phone);
+            }
+          } else {
+            setLeads([]);
+            setSelectedLead(null);
           }
+        } else {
+          setLeads([]);
+          setSelectedLead(null);
         }
       } catch (err) {
-        console.warn("fetchAdminBookings fallback in Outbound:", err);
-      }
-
-    // Check sessionStorage for lead passed from Admin Console
-      if (typeof window !== "undefined") {
-        const storedLead = sessionStorage.getItem("mahindra_selected_outbound_lead");
-        if (storedLead) {
-          try {
-            const parsed = JSON.parse(storedLead);
-            const foundOrNew: OutboundLeadItem = {
-              booking_reference: parsed.booking_reference || "MB-2026-001",
-              customer_id: parsed.customer_id || "CUST-001",
-              customer_name: parsed.customer_name || "Valued Customer",
-              customer_phone: parsed.customer_phone || "+91 98201 55432",
-              vehicle_name: parsed.vehicle_name || "Mahindra SUV",
-              sales_advisor_name: parsed.sales_advisor_name || "Rajesh Varma",
-              session_id: parsed.booking_reference || parsed.session_id || "BK-MAH-23382",
-              status: "TestRide_Completed",
-              loved_features: parsed.loved_features || ["FSD Suspension", "Skyroof"],
-              objections_raised: parsed.objections_raised || ["Delivery timeline"]
-            };
-            setSelectedLead(foundOrNew);
-            setTwilioPhoneNumber(foundOrNew.customer_phone);
-          } catch (e) {
-            console.error("Error parsing stored lead:", e);
-          }
-        }
+        console.error("Error loading outbound leads from database:", err);
+        setLeads([]);
+        setSelectedLead(null);
       }
     }
 
@@ -204,6 +174,7 @@ export function OutboundCallSimulator({
   };
 
   const handleStartBrowserCall = async () => {
+    if (!selectedLead) return;
     setCallState("connecting");
     setCallDuration(0);
     setBargeInCount(0);
@@ -314,15 +285,17 @@ export function OutboundCallSimulator({
     setIsCustomerSpeaking(false);
 
     // Mark as feedback captured in local leads state
-    setLeads((prev) =>
-      prev.map((l) =>
-        l.booking_reference === selectedLead.booking_reference ? { ...l, has_feedback_call: true } : l
-      )
-    );
+    if (selectedLead) {
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.booking_reference === selectedLead.booking_reference ? { ...l, has_feedback_call: true } : l
+        )
+      );
+    }
   };
 
   const handleSendCustomerTurn = async (userText: string) => {
-    if (!userText.trim() || isAiSpeaking) return;
+    if (!selectedLead || !userText.trim() || isAiSpeaking) return;
 
     setIsCustomerSpeaking(true);
     setTimeout(() => setIsCustomerSpeaking(false), 2000);
@@ -472,7 +445,7 @@ export function OutboundCallSimulator({
               </div>
             ) : (
               filteredLeads.map((lead, idx) => {
-                const isSelected = selectedLead.booking_reference === lead.booking_reference;
+                const isSelected = selectedLead ? selectedLead.booking_reference === lead.booking_reference : false;
                 return (
                   <div
                     key={idx}
@@ -521,6 +494,29 @@ export function OutboundCallSimulator({
 
         {/* ================= RIGHT PANEL: Outbound Call Interface ================= */}
         <div className="lg:col-span-8 space-y-5">
+          {!selectedLead ? (
+            <div className="bg-white rounded-3xl border border-dashed border-slate-300 p-12 text-center space-y-4 shadow-xs">
+              <div className="w-16 h-16 rounded-full bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center mx-auto shadow-xs">
+                <Car className="w-8 h-8" />
+              </div>
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <h3 className="text-base font-bold text-slate-800">No Completed Test Rides in Database</h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  To simulate an authentic outbound AI voice call with <strong>Kavya AI</strong>, complete a test ride session first in <strong>Stage 2 (Sales Mobile App)</strong>.
+                </p>
+              </div>
+              <div className="pt-2">
+                <a
+                  href="/?stage=sales_app"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 text-white text-xs font-bold shadow-sm hover:bg-red-700 transition-all"
+                >
+                  <span>Go to Stage 2: Sales Companion App</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Selected Customer Details Header Card */}
           <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
@@ -812,6 +808,8 @@ export function OutboundCallSimulator({
               </div>
             )}
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>

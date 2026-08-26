@@ -177,7 +177,7 @@ export function TestDriveChatCalendar({
   vehicleId = "thar_roxx",
   vehicleName = "Mahindra Thar ROXX",
   initialVariant = "AX7L Diesel AT 4x4",
-  customerName = "Kunal Mathuria",
+  customerName = "Aarav Sharma",
   customerPhone = "+91 98196 57034",
   onSlotBooked,
   onClose

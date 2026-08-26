@@ -10,13 +10,24 @@ function getApiBase() {
 
 const API_BASE = getApiBase();
 
-// Catalog & Dealerships
+// In-memory Fast Client-Side Cache
+let cachedCatalog: any = null;
+let cachedDealerships: any = null;
+const cachedLeadsByDealership = new Map<string, { data: any; expiresAt: number }>();
+
+export function invalidateLeadsCache() {
+  cachedLeadsByDealership.clear();
+}
+
+// Catalog & Dealerships with Instant Cache Return
 export async function fetchCatalog() {
+  if (cachedCatalog) return cachedCatalog;
   try {
     const res = await fetch(`${API_BASE}/catalog`);
     if (!res.ok) throw new Error("Catalog fetch failed");
     const data = await res.json();
-    return Array.isArray(data) && data.length > 0 ? data : DEFAULT_VEHICLES;
+    cachedCatalog = Array.isArray(data) && data.length > 0 ? data : DEFAULT_VEHICLES;
+    return cachedCatalog;
   } catch (err) {
     console.warn("fetchCatalog fallback to default catalog:", err);
     return DEFAULT_VEHICLES;
@@ -24,9 +35,15 @@ export async function fetchCatalog() {
 }
 
 export async function fetchDealerships() {
+  if (cachedDealerships) return cachedDealerships;
   try {
     const res = await fetch(`${API_BASE}/catalog/dealerships`);
-    return await res.json();
+    const data = await res.json();
+    if (Array.isArray(data) && data.length > 0) {
+      cachedDealerships = data;
+      return data;
+    }
+    return data;
   } catch (err) {
     return [
       {
@@ -109,20 +126,37 @@ export async function bookTestDrive(payload: any) {
   return res.json();
 }
 
-// Stage 2: Sales Mobile App & Test Ride Recording
+// Stage 2: Sales Mobile App & Test Ride Recording (with SWR Cache)
 export async function fetchSalesLeads(dealershipId?: string) {
+  const key = dealershipId && dealershipId !== "ALL" ? dealershipId : "ALL";
+  const now = Date.now();
+  const existing = cachedLeadsByDealership.get(key);
+
+  if (existing && now < existing.expiresAt) {
+    return existing.data;
+  }
+
   try {
     const url = dealershipId && dealershipId !== "ALL"
       ? `${API_BASE}/sales/leads?dealership_id=${encodeURIComponent(dealershipId)}`
       : `${API_BASE}/sales/leads`;
     const res = await fetch(url);
-    return await res.json();
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      cachedLeadsByDealership.set(key, {
+        data,
+        expiresAt: now + 30000 // Cache for 30 seconds
+      });
+    }
+    return data;
   } catch (err) {
+    if (existing) return existing.data;
     return [];
   }
 }
 
 export async function uploadTestRideRecording(payload: any) {
+  invalidateLeadsCache();
   const res = await fetch(`${API_BASE}/sales/test-ride/upload-recording`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

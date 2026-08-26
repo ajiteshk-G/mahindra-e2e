@@ -21,29 +21,37 @@ async def lifespan(app: FastAPI):
     # Initialize DB schemas on startup
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Safe SQLite column additions if not present
-        try:
-            from sqlalchemy import text
-            await conn.execute(text('ALTER TABLE test_drive_bookings ADD COLUMN advisor_checklist JSON'))
-        except Exception:
-            pass
-        try:
-            from sqlalchemy import text
-            await conn.execute(text('ALTER TABLE customers ADD COLUMN advisor_checklist JSON'))
-        except Exception:
-            pass
-        try:
-            from sqlalchemy import text
-            await conn.execute(text('ALTER TABLE test_ride_recordings ADD COLUMN booking_reference VARCHAR(64)'))
-        except Exception:
-            pass
         
-    # Seed default customer and dealerships
+    # Seed default customer and dealerships & pre-warm cache
     async with AsyncSessionLocal() as db:
-        await CustomerService.get_or_create_default_customer(db)
         try:
+            await CustomerService.get_or_create_default_customer(db)
             from seeds.seed_dealerships import seed_dealerships
             await seed_dealerships()
+            
+            # Prewarm cache for instantaneous response
+            from sqlalchemy.future import select
+            from app.models.dealership import Dealership
+            from app.schemas.catalog import DealershipItem
+            from app.services.cache_service import cache
+            
+            d_res = await db.execute(select(Dealership).where(Dealership.is_active == True))
+            all_dealers = d_res.scalars().all()
+            if all_dealers:
+                items = [
+                    DealershipItem(
+                        id=d.id,
+                        name=d.name,
+                        address=d.address,
+                        city=d.city,
+                        phone=d.phone,
+                        rating=d.rating or 4.8,
+                        available_advisors=d.available_advisors or ["Rajesh Varma"],
+                        has_test_drive_home_pickup=True
+                    )
+                    for d in all_dealers
+                ]
+                cache.set("dealerships_all", items, ttl_seconds=3600)
         except Exception as e:
             pass
         

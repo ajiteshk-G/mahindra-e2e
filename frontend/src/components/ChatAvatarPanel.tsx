@@ -55,12 +55,12 @@ export function ChatAvatarPanel({
   initialCustomerPhone = "",
   activeVehicleId = "thar_roxx"
 }: ChatAvatarPanelProps) {
-  const [name, setName] = useState(initialCustomerName || "");
-  const [phone, setPhone] = useState(initialCustomerPhone || "");
+  const [name, setName] = useState(initialCustomerName || "Kunal Mathuria");
+  const [phone, setPhone] = useState(initialCustomerPhone || "9820155432");
   const [nameError, setNameError] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [touched, setTouched] = useState({ name: false, phone: false });
-  const [isVerified, setIsVerified] = useState(false);
+  const [isVerified, setIsVerified] = useState(true);
   const [showCalendar, setShowCalendar] = useState(false);
 
   // Open calendar widget when customer asks for a test ride/drive or agrees to book
@@ -266,9 +266,16 @@ export function ChatAvatarPanel({
               <span>Kabir</span>
               <span className="ai-chip">AI Specialist</span>
               {isVerified && name && (
-                <span className="text-[9px] text-cyan-400 bg-cyan-950/60 border border-cyan-800/60 px-1.5 py-0.2 rounded-full font-mono flex items-center gap-0.5">
-                  <CheckCircle2 className="w-2.5 h-2.5 text-cyan-400" /> {name.split(" ")[0]}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsVerified(false)}
+                  className="text-[9px] text-cyan-400 hover:text-white bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-800/60 px-1.5 py-0.5 rounded-full font-mono flex items-center gap-1 cursor-pointer transition-all"
+                  title="Click to edit name and phone number"
+                >
+                  <CheckCircle2 className="w-2.5 h-2.5 text-cyan-400" />
+                  <span>{name.split(" ")[0]}</span>
+                  <Edit3 className="w-2.5 h-2.5 text-slate-400 hover:text-cyan-300 ml-0.5" />
+                </button>
               )}
             </div>
             <div className="consultant-title">Mahindra Virtual Showroom</div>
@@ -342,14 +349,14 @@ export function ChatAvatarPanel({
               <button
                 type="button"
                 onClick={() => {
-                  setName("Kunal mathuria");
-                  setPhone("9819657034");
+                  setName("Kunal Mathuria");
+                  setPhone("9820155432");
                   setNameError("");
                   setPhoneError("");
                   setTouched({ name: true, phone: true });
                 }}
                 className="text-[10px] font-bold text-cyan-300 hover:text-white bg-cyan-900/50 hover:bg-cyan-800/70 border border-cyan-500/40 px-2 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer shadow-sm active:scale-95"
-                title="Fill dummy details: Kunal mathuria (+91 98196 57034)"
+                title="Fill dummy details: Kunal Mathuria (+91 98201 55432)"
               >
                 <Sparkles className="w-2.5 h-2.5 text-amber-300" />
                 <span>Auto Fill</span>
@@ -705,8 +712,8 @@ export function ChatAvatarPanel({
           {showCalendar && (
             <TestDriveChatCalendar
               vehicleId={activeVehicleId}
-              customerName={name || initialCustomerName || "Kunal Mathuria"}
-              customerPhone={phone || initialCustomerPhone || "+91 98196 57034"}
+              customerName={name || initialCustomerName || "Aarav Sharma"}
+              customerPhone={phone || initialCustomerPhone || "+91 98201 55432"}
               onSlotBooked={(booking) => {
                 onSendMessage(
                   `I have successfully booked the ${booking.vehicle_name} (${booking.variant || ""}) test drive for ${booking.slot_date} at ${booking.slot_time}. Reference: ${booking.booking_reference}.`
