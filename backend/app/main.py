@@ -55,8 +55,8 @@ async def lifespan(app: FastAPI):
                     for d in all_dealers
                 ]
                 cache.set("dealerships_all", items, ttl_seconds=3600)
-        except Exception as e:
-            pass
+    except Exception as e:
+        print(f"Startup notice: {e}")
         
     yield
     await engine.dispose()
