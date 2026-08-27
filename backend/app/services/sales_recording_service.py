@@ -231,31 +231,65 @@ class SalesRecordingService:
         )
         booking_id = booking.id if booking else None
 
-        # 3. Formulate standard GCS Path: gs://mahindra-sales-recordings/test_rides/<date>/<booking_reference>.wav
+        # 3. Formulate standard GCS Path based on mime type
         now_utc = datetime.now(timezone.utc)
         date_str = now_utc.strftime("%Y-%m-%d")
-        gcs_bucket = "mahindra-sales-recordings"
-        gcs_object_path = f"test_rides/{date_str}/{booking_ref}.wav"
+        gcs_bucket = settings.GCS_RECORDINGS_BUCKET
+
+        # Detect audio extension and mime type
+        audio_mime_type = req.audio_format or "audio/wav"
+        ext = "wav"
+        if "webm" in audio_mime_type.lower():
+            ext = "webm"
+        elif "mp4" in audio_mime_type.lower() or "m4a" in audio_mime_type.lower():
+            ext = "m4a"
+        elif "ogg" in audio_mime_type.lower():
+            ext = "ogg"
+        elif "mp3" in audio_mime_type.lower() or "mpeg" in audio_mime_type.lower():
+            ext = "mp3"
+
+        gcs_object_path = f"test_rides/{date_str}/{booking_ref}.{ext}"
         gcs_uri = f"gs://{gcs_bucket}/{gcs_object_path}"
 
-        # Write local file copy for audit and storage
+        # Write local file copy for audit and upload
         local_dir = os.path.join(UPLOAD_BASE_DIR, date_str)
         os.makedirs(local_dir, exist_ok=True)
-        local_file_path = os.path.join(local_dir, f"{booking_ref}.wav")
+        local_file_path = os.path.join(local_dir, f"{booking_ref}.{ext}")
 
+        raw_bytes: Optional[bytes] = None
         file_size = 1485200
-        if req.audio_base64:
+        has_real_audio = False
+
+        if req.audio_base64 and len(req.audio_base64.strip()) > 50:
             import base64
             try:
-                raw_bytes = base64.b64decode(req.audio_base64.split(",")[-1])
+                header, data = req.audio_base64.split(",", 1) if "," in req.audio_base64 else ("", req.audio_base64)
+                if "data:" in header and ";" in header:
+                    detected_mime = header.split("data:")[1].split(";")[0].strip()
+                    if detected_mime:
+                        audio_mime_type = detected_mime
+                raw_bytes = base64.b64decode(data)
                 with open(local_file_path, "wb") as f:
                     f.write(raw_bytes)
                 file_size = len(raw_bytes)
+                if file_size > 500:
+                    has_real_audio = True
             except Exception as e:
                 logger.warning(f"Failed to decode base64 audio: {e}")
                 _create_synthetic_wav_file(local_file_path)
         else:
             _create_synthetic_wav_file(local_file_path)
+
+        # Upload audio file to Google Cloud Storage (GCS)
+        try:
+            from google.cloud import storage
+            storage_client = storage.Client(project=settings.VERTEX_PROJECT_ID)
+            bucket = storage_client.bucket(gcs_bucket)
+            blob = bucket.blob(gcs_object_path)
+            blob.upload_from_filename(local_file_path, content_type=audio_mime_type)
+            logger.info(f"Uploaded test ride recording to GCS: {gcs_uri}")
+        except Exception as e:
+            logger.error(f"Failed to upload to GCS bucket {gcs_bucket}: {e}")
 
         # 4. Vehicle metadata and Advisor details
         v_info = CatalogService.get_vehicle_by_id(req.vehicle_id)
@@ -265,14 +299,12 @@ class SalesRecordingService:
         advisor_short = advisor_name.split(" ")[0].replace("Specialist", "").strip("()") or "Rajesh"
 
         checklist_items = req.advisor_checklist or (booking.advisor_checklist if booking else None) or (customer.advisor_checklist if customer else None) or CatalogService.get_static_checklist(req.vehicle_id)
-        checklist_str = " • ".join(checklist_items[:3]) if checklist_items else "FSD Suspension • Panoramic Skyroof • Engine Acceleration"
-
         session_id = req.session_id or f"TR-2026-{uuid.uuid4().hex[:6].upper()}"
 
-        # 5. Hindi In-Vehicle Test Drive Dialogue Script (XUV700 & Mahindra SUVs)
+        # 5. Default Simulated Hindi In-Vehicle Test Drive Dialogue Script
         engine_str = "2.0L mStallion Turbo-Petrol engine (200 bhp)" if "xuv700" in req.vehicle_id.lower() or "xuv" in req.vehicle_id.lower() else "2.2L mHawk Diesel engine (175 PS / 370 Nm)"
         
-        transcript = f"""[00:12] Advisor {advisor_short}: "Namaste {cust_name} ji! Throttle thoda press karke dekhiye. Yeh {engine_str} hai—pickup instantly feel hoga."
+        simulated_transcript = f"""[00:12] Advisor {advisor_short}: "Namaste {cust_name} ji! Throttle thoda press karke dekhiye. Yeh {engine_str} hai—pickup instantly feel hoga."
 [00:32] {cust_name} (Customer): "Haan, response toh kafi punchy aur smooth hai. Cabin ke andar engine noise bilkul nahi aa rahi. Suspension bhi kaafi well-cushioned lag raha hai potholes par."
 [00:54] Advisor {advisor_short}: "Bilkul sir, isme Frequency Selective Damping (FSD) suspension hai, jo automatic road conditions ke hisaab se adjust hota hai."
 [01:18] {cust_name} (Customer): "Aur yeh sunroof poora piche tak jaata hai kya? Kids love big sunroofs."
@@ -289,7 +321,7 @@ class SalesRecordingService:
 [04:50] {cust_name} (Customer): "Bahut badhiya! Overall experience aur drive dono top notch hain. Chaliye dealership chalte hain aur booking & financing initiate karte hain."
 [05:05] Advisor {advisor_short}: "Thank you {cust_name} ji! Parking the car back at the showroom. Hamara system turant aapko pre-approved financing details bhej dega." """
 
-        # 6. Dynamic Evaluation using Gemini (NO HARDCODED SCORES)
+        transcript = simulated_transcript
         customer_sentiment = 0.90
         purchase_intent = 0.90
         advisor_score = 8.5
@@ -306,6 +338,7 @@ class SalesRecordingService:
         advisor_coaching = f"Advisor {advisor_short} handled feature demonstration (FSD, Skyroof, ESP) and competition comparison vs Kia effectively."
         recommended_action = f"Initiate instant digital loan application with flexible EMI for {cust_name} to confirm {veh_name} ({req.variant})."
 
+        # 6. Dynamic Evaluation and Transcription using Gemini Multimodal Audio Model
         try:
             from google import genai
             from google.genai import types
@@ -316,22 +349,45 @@ class SalesRecordingService:
                 project=settings.VERTEX_PROJECT_ID,
                 location=settings.VERTEX_LOCATION
             )
-            analysis_prompt = f"""You are an expert Automotive Sales Audio Analyst for Mahindra Auto.
-Analyze this authentic Hindi/Hinglish in-vehicle test drive conversation between Sales Advisor {advisor_name} and Customer {cust_name} for vehicle {veh_name} ({req.variant}).
+
+            is_live_recording = has_real_audio and req.simulated_scenario != "test_drive_simulation"
+
+            if is_live_recording and raw_bytes:
+                # Transcribe directly from recorded audio and extract speech insights
+                audio_part = types.Part.from_bytes(data=raw_bytes, mime_type=audio_mime_type)
+                analysis_prompt = f"""You are an expert Automotive Sales Audio Analyst and Transcriber for Mahindra Auto.
+You are given an authentic in-vehicle audio recording from a real test drive session between Sales Advisor {advisor_name} and Customer {cust_name} for vehicle {veh_name} ({req.variant}).
+
+CRITICAL INSTRUCTIONS:
+1. Verbatim Transcription: Transcribe the actual spoken audio word-for-word with speaker labels (e.g. "[00:05] Advisor {advisor_short}: ...", "[00:15] {cust_name} (Customer): ...") and timestamps. If the audio is in Hindi, English, or Hinglish, transcribe exactly what is spoken. If no clear speech is audible, state: "[00:00] In-vehicle test drive audio recorded. Ambient drive sounds captured."
+2. Loved Features Extraction: Extract ONLY the vehicle features that the customer explicitly praised, appreciated, liked, or asked positively about in THIS recording (e.g. engine pickup, suspension smoothness, panoramic sunroof, braking, sound system, ventilated seats, etc.). Do NOT include generic or pre-canned features unless they were actually discussed in the audio.
+3. Objections & Concerns Extraction: Extract ONLY the specific doubts, objections, hesitations, competitor comparisons, price questions, or delivery concerns that the customer explicitly raised in THIS recording. If the customer raised NO objections or concerns in the audio, return []. Do NOT invent competitor comparisons unless explicitly mentioned in the audio.
+4. Sentiment & Purchase Intent: Calculate realistic scores (0.00 to 1.00) based strictly on customer voice tone, dialogue, and buying signals in the recording.
+5. Sales Pitch Score & Coaching: Evaluate the advisor's pitch (1.0 to 10.0) and provide 2-3 sentences of constructive coaching feedback based on how the advisor actually presented features and answered queries in the recording.
+6. Recommended Action: 1-2 actionable next steps for the dealership team based on this specific recording.
+
+Return strictly valid JSON with keys:
+"transcript", "customer_sentiment_score", "purchase_intent_score", "advisor_pitch_score", "loved_features", "objections_raised", "advisor_coaching_feedback", "recommended_action"."""
+                contents = [audio_part, analysis_prompt]
+            else:
+                # Text analysis on simulation transcript
+                analysis_prompt = f"""You are an expert Automotive Sales Audio Analyst for Mahindra Auto.
+Analyze this in-vehicle test drive conversation between Sales Advisor {advisor_name} and Customer {cust_name} for vehicle {veh_name} ({req.variant}).
 
 Conversation Transcript:
-{transcript}
+{simulated_transcript}
 
 Dynamically evaluate the conversation and extract non-hardcoded realistic metrics:
-1. customer_sentiment_score: Float between 0.00 and 1.00 based purely on customer satisfaction, tone, and feedback in the transcript.
+1. customer_sentiment_score: Float between 0.00 and 1.00 based on customer satisfaction, tone, and feedback.
 2. purchase_intent_score: Float between 0.00 and 1.00 based on customer buying readiness, financing questions, and decision to book.
-3. advisor_pitch_score: Float between 1.0 and 10.0 based on how effectively the sales advisor explained the features (FSD, Skyroof, Safety, Kia comparison, Financing).
+3. advisor_pitch_score: Float between 1.0 and 10.0 based on how effectively the sales advisor explained the features.
 4. loved_features: List of 3-4 specific features explicitly praised by the customer.
 5. objections_raised: List of 1-2 specific concerns/comparisons mentioned by the customer.
 6. advisor_coaching_feedback: Constructive coaching feedback for the advisor in 2-3 sentences.
 7. recommended_action: Immediate recommended next step for the digital follow-up team in 1-2 sentences.
 
-Return valid JSON with keys: customer_sentiment_score, purchase_intent_score, advisor_pitch_score, loved_features, objections_raised, advisor_coaching_feedback, recommended_action."""
+Return valid JSON with keys: transcript, customer_sentiment_score, purchase_intent_score, advisor_pitch_score, loved_features, objections_raised, advisor_coaching_feedback, recommended_action."""
+                contents = [analysis_prompt]
 
             config = types.GenerateContentConfig(
                 temperature=0.2,
@@ -342,31 +398,46 @@ Return valid JSON with keys: customer_sentiment_score, purchase_intent_score, ad
                 asyncio.to_thread(
                     vertex_client.models.generate_content,
                     model=settings.REST_CHAT_MODEL,
-                    contents=[analysis_prompt],
+                    contents=contents,
                     config=config
                 ),
-                timeout=8.0
+                timeout=12.0
             )
 
             if gemini_resp and gemini_resp.text:
                 parsed = json.loads(gemini_resp.text)
+                if parsed.get("transcript") and len(parsed["transcript"].strip()) > 5:
+                    transcript = parsed["transcript"].strip()
                 if "customer_sentiment_score" in parsed:
-                    customer_sentiment = round(float(parsed["customer_sentiment_score"]), 2)
+                    val = float(parsed["customer_sentiment_score"])
+                    customer_sentiment = round(val / 10.0 if val > 1.0 else val, 2)
                 if "purchase_intent_score" in parsed:
-                    purchase_intent = round(float(parsed["purchase_intent_score"]), 2)
+                    val = float(parsed["purchase_intent_score"])
+                    purchase_intent = round(val / 10.0 if val > 1.0 else val, 2)
                 if "advisor_pitch_score" in parsed:
-                    advisor_score = round(float(parsed["advisor_pitch_score"]), 1)
-                if parsed.get("loved_features"):
-                    loved_features = parsed["loved_features"]
-                if parsed.get("objections_raised"):
-                    objections_raised = parsed["objections_raised"]
+                    val = float(parsed["advisor_pitch_score"])
+                    advisor_score = round(val if val <= 10.0 else val / 10.0, 1)
+                
+                if is_live_recording:
+                    # Parse loved features and objections directly from audio analysis
+                    if "loved_features" in parsed and isinstance(parsed["loved_features"], list):
+                        audio_loved = [str(f).strip() for f in parsed["loved_features"] if str(f).strip()]
+                        loved_features = audio_loved if audio_loved else [f"Drive dynamics & performance ({veh_name})"]
+                    if "objections_raised" in parsed and isinstance(parsed["objections_raised"], list):
+                        objections_raised = [str(o).strip() for o in parsed["objections_raised"] if str(o).strip()]
+                else:
+                    if parsed.get("loved_features") and isinstance(parsed["loved_features"], list) and len(parsed["loved_features"]) > 0:
+                        loved_features = parsed["loved_features"]
+                    if parsed.get("objections_raised") and isinstance(parsed["objections_raised"], list):
+                        objections_raised = parsed["objections_raised"]
+
                 if parsed.get("advisor_coaching_feedback"):
                     advisor_coaching = parsed["advisor_coaching_feedback"]
                 if parsed.get("recommended_action"):
                     recommended_action = parsed["recommended_action"]
-                logger.info(f"Gemini dynamic evaluation completed successfully: sentiment={customer_sentiment}, intent={purchase_intent}, pitch_score={advisor_score}")
+                logger.info(f"Gemini evaluation completed: transcript_length={len(transcript)}, sentiment={customer_sentiment}, intent={purchase_intent}, pitch_score={advisor_score}, loved={len(loved_features)}, objections={len(objections_raised)}")
         except Exception as e:
-            logger.warning(f"Gemini dynamic evaluation notice: {e}")
+            logger.warning(f"Gemini dynamic audio evaluation notice: {e}")
 
         # 6. Create TestRideRecording DB Record
         recording = TestRideRecording(

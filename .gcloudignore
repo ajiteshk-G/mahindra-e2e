@@ -17,3 +17,9 @@ backend/__pycache__/
 *.pyo
 *.pyd
 .env*
+.next/
+frontend/.next/
+android/
+*package-lock.json
+
+

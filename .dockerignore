@@ -14,3 +14,10 @@ backend/__pycache__/
 *.pyo
 *.pyd
 .env*
+.next/
+frontend/.next/
+android/
+.git/
+*package-lock.json
+
+

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     DEFAULT_LOCALE: str = os.getenv("DEFAULT_LOCALE", "hi-IN") # Multilingual
     
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:MahindraDev2026!Secure@34.42.54.228:5432/mahindra_auto")
+    GCS_RECORDINGS_BUCKET: str = os.getenv("GCS_RECORDINGS_BUCKET", os.getenv("GCS_BUCKET", "mb-poc-352009-sales-recordings"))
     WS_LIVE_AUDIO_PATH: str = "/ws/live-audio"
     DEFAULT_DEALERSHIP: str = "Bayview Mahindra, Bandra West, Mumbai"    
     

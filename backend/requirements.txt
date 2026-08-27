@@ -13,7 +13,9 @@ pillow>=10.2.0
 numpy>=1.26.0
 google-genai>=0.1.1
 google-auth>=2.0.0
+google-cloud-storage>=2.14.0
 certifi
 
 asyncpg>=0.29.0
 psycopg2-binary>=2.9.9
+

@@ -25,7 +25,7 @@ async def test_test_ride_recording_and_insights(client: AsyncClient):
     assert resp.status_code == 200
     data = resp.json()
     assert data["session_id"].startswith("TR-2026-")
-    assert "gs://mahindra-sales-recordings/test_rides/" in data["gcs_uri"]
+    assert "/test_rides/" in data["gcs_uri"] and data["gcs_uri"].startswith("gs://")
     assert data["customer_sentiment_score"] >= 0.8
     assert data["purchase_intent_score"] >= 0.8
     assert len(data["loved_features"]) > 0

@@ -37,13 +37,15 @@ interface SalesMobileAppProps {
   profile: CustomerProfile | null;
   selectedVehicleId?: string;
   onProceedToOutboundCall: (insights: TestRideInsightResponse) => void;
+  isStandalone?: boolean;
 }
 
 export function SalesMobileApp({
   vehicles,
   profile,
   selectedVehicleId = "thar_roxx",
-  onProceedToOutboundCall
+  onProceedToOutboundCall,
+  isStandalone = false
 }: SalesMobileAppProps) {
   // Showrooms & Filtering
   const [dealerships, setDealerships] = useState<DealershipItem[]>([]);
@@ -259,8 +261,9 @@ export function SalesMobileApp({
 
     try {
       let base64Audio: string | undefined = undefined;
+      const detectedMime = audioChunksRef.current[0]?.type || "audio/webm";
       if (audioChunksRef.current.length > 0) {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+        const audioBlob = new Blob(audioChunksRef.current, { type: detectedMime });
         const reader = new FileReader();
         base64Audio = await new Promise<string>((resolve) => {
           reader.onloadend = () => resolve(reader.result as string);
@@ -275,8 +278,8 @@ export function SalesMobileApp({
         vehicle_id: testVehicleId,
         variant: selectedVariant,
         sales_advisor_name: selectedLead?.dealership_name ? `Specialist (${selectedLead.dealership_name})` : "Rajesh Varma (Bayview Mahindra)",
-        duration_seconds: Math.max(recordingSeconds, 184),
-        audio_format: "audio/wav",
+        duration_seconds: Math.max(recordingSeconds, 1),
+        audio_format: detectedMime,
         audio_base64: base64Audio,
         simulated_scenario: "test_drive_recording",
         advisor_checklist: selectedLead?.advisor_checklist
@@ -345,73 +348,10 @@ export function SalesMobileApp({
       ? "All Regional Dealerships"
       : dealerships.find((d) => d.id === selectedShowroom)?.name || selectedShowroom;
 
-  return (
-    <div className="space-y-6">
-      {/* Stage Header Banner with Showroom Selector (Light Theme) */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-700 border border-red-200 text-xs font-bold uppercase tracking-wider">
-            <Smartphone className="w-3.5 h-3.5 text-red-600" />
-            Stage 2: Sales Advisor Companion &amp; Test Ride Recording
-          </div>
-          <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <span>Advisor Field Companion &amp; GCS Audio Insights Engine</span>
-          </h2>
-          <p className="text-xs md:text-sm text-slate-600 max-w-2xl leading-relaxed">
-            Select a showroom to load verified customer test drive bookings. The advisor companion automatically pulls the customer&apos;s booked vehicle from the database and captures in-vehicle audio with AI speaker diarization.
-          </p>
-
-          {/* Showroom Selector Dropdown in Banner */}
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <div className="flex items-center gap-1.5 text-xs text-slate-700 font-bold bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 shadow-xs">
-              <Building2 className="w-3.5 h-3.5 text-red-600 shrink-0" />
-              <span>Select Showroom:</span>
-              <select
-                value={selectedShowroom}
-                onChange={(e) => setSelectedShowroom(e.target.value)}
-                className="bg-white text-slate-900 font-bold border border-slate-300 rounded-lg px-2.5 py-1 text-xs outline-none focus:border-red-500 cursor-pointer shadow-2xs"
-              >
-                <option value="ALL">🏢 All Showrooms ({dealerships.length} Dealerships)</option>
-                {dealerships.map((dealer) => (
-                  <option key={dealer.id} value={dealer.id}>
-                    {dealer.name} ({dealer.city})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <span className="text-[11px] font-mono font-bold text-slate-700 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
-              {leads.length} Booked Lead{leads.length !== 1 ? "s" : ""} Available
-            </span>
-          </div>
-        </div>
-
-        {insights && (
-          <button
-            onClick={() => onProceedToOutboundCall(insights)}
-            className="bg-red-600 hover:bg-red-700 text-white text-xs md:text-sm font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-2 shrink-0 cursor-pointer hover:scale-102"
-          >
-            <span>Proceed to Stage 3: Outbound Call</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      {/* Grid: 5 Cols Mobile Phone Frame | 7 Cols Audio AI Insights Dashboard */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left 5 Cols: Realistic Mobile Device View */}
-        <div className="lg:col-span-5 flex justify-center">
-          <div className="w-full max-w-sm bg-slate-900 rounded-[42px] p-3 shadow-2xl border-[6px] border-slate-700 relative">
-            {/* Phone Notch / Dynamic Island */}
-            <div className="w-28 h-5 bg-black rounded-full mx-auto mb-2 flex items-center justify-center gap-1.5 shadow-inner">
-              <span className="w-2 h-2 rounded-full bg-neutral-800"></span>
-              <span className="w-2 h-2 rounded-full bg-blue-900/80"></span>
-            </div>
-
-            {/* Mobile Screen Shell (Crisp Light Theme Interior) */}
-            <div className="bg-slate-50 rounded-[32px] overflow-hidden border border-slate-200 flex flex-col h-[640px] text-xs shadow-inner">
-              {/* App Top Bar */}
-              <div className="bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between shadow-2xs">
+  const renderMobileScreen = (fullViewport: boolean) => (
+    <div className={`bg-slate-50 flex flex-col text-xs shadow-inner overflow-hidden ${fullViewport ? "h-full w-full rounded-none" : "h-[640px] rounded-[32px] border border-slate-200"}`}>
+      {/* App Top Bar */}
+      <div className="bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between shadow-2xs">
                 <div>
                   <span className="text-[9.5px] text-red-600 font-bold uppercase tracking-wider block">
                     Mahindra Field Companion
@@ -809,21 +749,35 @@ export function SalesMobileApp({
                         </div>
 
                         <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-1 shadow-2xs">
-                          <span className="text-[10px] font-bold text-emerald-800 uppercase">Loved Features:</span>
-                          <ul className="text-[10px] text-slate-700 list-disc pl-4 space-y-0.5">
-                            {insights.loved_features.map((f, i) => (
-                              <li key={i}>{f}</li>
-                            ))}
-                          </ul>
+                          <span className="text-[10px] font-bold text-emerald-800 uppercase flex items-center gap-1">
+                            ✓ Loved Features (From Spoken Audio):
+                          </span>
+                          {insights.loved_features && insights.loved_features.length > 0 ? (
+                            <ul className="text-[10px] text-slate-700 list-disc pl-4 space-y-0.5">
+                              {insights.loved_features.map((f, i) => (
+                                <li key={i}>{f}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-[10px] text-slate-600 pl-1">Overall test drive vehicle performance</p>
+                          )}
                         </div>
 
                         <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 space-y-1 shadow-2xs">
-                          <span className="text-[10px] font-bold text-amber-900 uppercase">Objections Raised:</span>
-                          <ul className="text-[10px] text-slate-700 list-disc pl-4 space-y-0.5">
-                            {insights.objections_raised.map((o, i) => (
-                              <li key={i}>{o}</li>
-                            ))}
-                          </ul>
+                          <span className="text-[10px] font-bold text-amber-900 uppercase flex items-center gap-1">
+                            Objections &amp; Concerns (From Spoken Audio):
+                          </span>
+                          {insights.objections_raised && insights.objections_raised.length > 0 ? (
+                            <ul className="text-[10px] text-slate-700 list-disc pl-4 space-y-0.5">
+                              {insights.objections_raised.map((o, i) => (
+                                <li key={i}>{o}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-[10px] text-emerald-800 font-medium pl-1">
+                              ✓ No major objections or concerns raised during the test drive.
+                            </p>
+                          )}
                         </div>
 
                         {onProceedToOutboundCall && (
@@ -845,7 +799,81 @@ export function SalesMobileApp({
                   </div>
                 )}
               </div>
+    </div>
+  );
+
+  if (isStandalone) {
+    return (
+      <div className="w-full h-full bg-slate-50 flex flex-col text-xs overflow-hidden">
+        {renderMobileScreen(true)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Stage Header Banner with Showroom Selector (Light Theme) */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-700 border border-red-200 text-xs font-bold uppercase tracking-wider">
+            <Smartphone className="w-3.5 h-3.5 text-red-600" />
+            Stage 2: Sales Advisor Companion &amp; Test Ride Recording
+          </div>
+          <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <span>Advisor Field Companion &amp; GCS Audio Insights Engine</span>
+          </h2>
+          <p className="text-xs md:text-sm text-slate-600 max-w-2xl leading-relaxed">
+            Select a showroom to load verified customer test drive bookings. The advisor companion automatically pulls the customer&apos;s booked vehicle from the database and captures in-vehicle audio with AI speaker diarization.
+          </p>
+
+          {/* Showroom Selector Dropdown in Banner */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div className="flex items-center gap-1.5 text-xs text-slate-700 font-bold bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 shadow-xs">
+              <Building2 className="w-3.5 h-3.5 text-red-600 shrink-0" />
+              <span>Select Showroom:</span>
+              <select
+                value={selectedShowroom}
+                onChange={(e) => setSelectedShowroom(e.target.value)}
+                className="bg-white text-slate-900 font-bold border border-slate-300 rounded-lg px-2.5 py-1 text-xs outline-none focus:border-red-500 cursor-pointer shadow-2xs"
+              >
+                <option value="ALL">🏢 All Showrooms ({dealerships.length} Dealerships)</option>
+                {dealerships.map((dealer) => (
+                  <option key={dealer.id} value={dealer.id}>
+                    {dealer.name} ({dealer.city})
+                  </option>
+                ))}
+              </select>
             </div>
+
+            <span className="text-[11px] font-mono font-bold text-slate-700 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
+              {leads.length} Booked Lead{leads.length !== 1 ? "s" : ""} Available
+            </span>
+          </div>
+        </div>
+
+        {insights && (
+          <button
+            onClick={() => onProceedToOutboundCall(insights)}
+            className="bg-red-600 hover:bg-red-700 text-white text-xs md:text-sm font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-2 shrink-0 cursor-pointer hover:scale-102"
+          >
+            <span>Proceed to Stage 3: Outbound Call</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Grid: 5 Cols Mobile Phone Frame | 7 Cols Audio AI Insights Dashboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left 5 Cols: Realistic Mobile Device View */}
+        <div className="lg:col-span-5 flex justify-center">
+          <div className="w-full max-w-sm bg-slate-900 rounded-[42px] p-3 shadow-2xl border-[6px] border-slate-700 relative">
+            {/* Phone Notch / Dynamic Island */}
+            <div className="w-28 h-5 bg-black rounded-full mx-auto mb-2 flex items-center justify-center gap-1.5 shadow-inner">
+              <span className="w-2 h-2 rounded-full bg-neutral-800"></span>
+              <span className="w-2 h-2 rounded-full bg-blue-900/80"></span>
+            </div>
+
+            {renderMobileScreen(false)}
           </div>
         </div>
 
