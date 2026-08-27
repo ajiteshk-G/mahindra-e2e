@@ -272,7 +272,7 @@ class SalesRecordingService:
                 with open(local_file_path, "wb") as f:
                     f.write(raw_bytes)
                 file_size = len(raw_bytes)
-                if file_size > 500:
+                if file_size > 50:
                     has_real_audio = True
             except Exception as e:
                 logger.warning(f"Failed to decode base64 audio: {e}")
@@ -322,21 +322,28 @@ class SalesRecordingService:
 [05:05] Advisor {advisor_short}: "Thank you {cust_name} ji! Parking the car back at the showroom. Hamara system turant aapko pre-approved financing details bhej dega." """
 
         transcript = simulated_transcript
-        customer_sentiment = 0.90
-        purchase_intent = 0.90
-        advisor_score = 8.5
-        loved_features = [
-            "2.0L mStallion Turbo-Petrol 200 bhp Punchy Acceleration",
-            "Frequency Selective Damping (FSD) Suspension over Potholes",
-            "Segment-Largest Panoramic Skyroof with Voice Commands",
-            "5-Star Global NCAP Safety Rating with 7 Airbags"
-        ]
-        objections_raised = [
-            "Price comparison with Kia (Seltos / Carens) at lower price point",
-            "Inquiry regarding flexible EMI tenure and down payment options"
-        ]
-        advisor_coaching = f"Advisor {advisor_short} handled feature demonstration (FSD, Skyroof, ESP) and competition comparison vs Kia effectively."
-        recommended_action = f"Initiate instant digital loan application with flexible EMI for {cust_name} to confirm {veh_name} ({req.variant})."
+        customer_sentiment = 0.85
+        purchase_intent = 0.85
+        advisor_score = 8.0
+        
+        is_live_recording = bool(has_real_audio and ("simulat" not in (req.simulated_scenario or "").lower()))
+
+        if is_live_recording:
+            loved_features: List[str] = []
+            objections_raised: List[str] = []
+        else:
+            loved_features = [
+                f"{veh_name} Engine Performance & Acceleration",
+                "Ride Comfort & Pliant Suspension",
+                "Skyroof & Cabin Spaciousness"
+            ]
+            objections_raised = [
+                "Segment competitor comparison",
+                "Flexible financing and EMI options"
+            ]
+
+        advisor_coaching = f"Advisor {advisor_short} presented vehicle capabilities and answered customer queries."
+        recommended_action = f"Initiate digital loan application and finalize booking for {cust_name} ({veh_name})."
 
         # 6. Dynamic Evaluation and Transcription using Gemini Multimodal Audio Model
         try:

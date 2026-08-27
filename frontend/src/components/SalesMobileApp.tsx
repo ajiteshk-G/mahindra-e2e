@@ -979,24 +979,34 @@ export function SalesMobileApp({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 space-y-2 shadow-2xs">
                   <span className="text-xs font-bold text-emerald-800 uppercase flex items-center gap-1">
-                    ✓ Loved Features ({insights.loved_features.length})
+                    ✓ Loved Features (From Spoken Audio) ({insights.loved_features?.length || 0})
                   </span>
-                  <ul className="text-xs text-slate-700 space-y-1 list-disc pl-4">
-                    {insights.loved_features.map((f, i) => (
-                      <li key={i}>{f}</li>
-                    ))}
-                  </ul>
+                  {insights.loved_features && insights.loved_features.length > 0 ? (
+                    <ul className="text-xs text-slate-700 space-y-1 list-disc pl-4">
+                      {insights.loved_features.map((f, i) => (
+                        <li key={i}>{f}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-slate-600 pl-1">Overall test drive vehicle performance</p>
+                  )}
                 </div>
 
                 <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 space-y-2 shadow-2xs">
                   <span className="text-xs font-bold text-amber-900 uppercase flex items-center gap-1">
-                    ⚠ Objections &amp; Concerns ({insights.objections_raised.length})
+                    ⚠ Objections &amp; Concerns (From Spoken Audio) ({insights.objections_raised?.length || 0})
                   </span>
-                  <ul className="text-xs text-slate-700 space-y-1 list-disc pl-4">
-                    {insights.objections_raised.map((o, i) => (
-                      <li key={i}>{o}</li>
-                    ))}
-                  </ul>
+                  {insights.objections_raised && insights.objections_raised.length > 0 ? (
+                    <ul className="text-xs text-slate-700 space-y-1 list-disc pl-4">
+                      {insights.objections_raised.map((o, i) => (
+                        <li key={i}>{o}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-emerald-800 font-medium pl-1">
+                      ✓ No major objections or concerns raised during the test drive.
+                    </p>
+                  )}
                 </div>
               </div>
 
