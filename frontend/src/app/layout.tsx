@@ -2,9 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Mahindra Auto — Explore SUVs & Born Electric Origins with MIA Live Avatar",
+  title: "Mahindra Auto — Explore SUVs & Born Electric Origins with Kabir Live Avatar",
   description: "Official Mahindra Virtual Experience Center featuring Live AI Avatar, 3D Co-Browsing, and Real-Time Specs.",
-  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -28,7 +27,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="manifest" href="/manifest.json" crossOrigin="use-credentials" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
