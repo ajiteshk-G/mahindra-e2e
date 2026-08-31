@@ -468,11 +468,6 @@ async def live_audio_websocket(websocket: WebSocket):
                                                     logger.debug(f"User interaction log notice: {err}")
 
                                             asyncio.create_task(_async_log_user_turn(user_text))
-=======
-                                                except Exception:
-                                                    pass
-                                            asyncio.create_task(_bg_log_turn(user_text))
->>>>>>> 1177b3c (refactor: update Gemini live audio integration with Kabir persona, auto-initiation, and connection settings)
                             elif "bytes" in data and data["bytes"]:
                                 import base64
                                 pcm_b64 = base64.b64encode(data["bytes"]).decode("utf-8")
