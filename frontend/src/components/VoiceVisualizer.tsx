@@ -27,36 +27,36 @@ export function VoiceVisualizer({
         style={{ opacity: isRecording ? glowOpacity : 0.2 }}
       />
 
-      {/* Top Model & Multimodal Stream Badges */}
+      {/* Top Model & Audio Stream Badges */}
       <div className="flex items-center justify-between w-full z-10 mb-3 px-1">
         <div className="flex items-center gap-1.5 bg-slate-800/90 backdrop-blur-md px-3 py-1 rounded-full border border-slate-700 text-[10px] font-mono text-cyan-400">
           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-          <span>gemini-3.1-flash-live-preview-04-2026</span>
+          <span>gemini-live-2.5-flash-native-audio</span>
         </div>
 
         <div className="flex items-center gap-1.5 bg-slate-800/90 backdrop-blur-md px-2.5 py-1 rounded-full border border-slate-700 text-[10px] font-bold text-red-400">
-          <Video className="w-3 h-3 text-red-400 animate-pulse" />
-          <span>Jay (VIDEO • orus)</span>
+          <Activity className="w-3 h-3 text-red-400 animate-pulse" />
+          <span>Kabir (Native Live Audio)</span>
         </div>
       </div>
 
-      {/* Main Avatar Stage with Live Lip-Sync Video Simulation */}
+      {/* Main Visualizer Stage with Live Audio Waveform Simulation */}
       <div className="relative my-3 flex flex-col items-center justify-center">
-        {/* Multimodal Video Avatar Box */}
+        {/* Live Audio Visualizer Box */}
         <div className="relative w-32 h-32 rounded-3xl bg-slate-800 border-2 border-red-500/60 flex items-center justify-center overflow-hidden shadow-2xl group">
-          {/* Animated Avatar Glow */}
+          {/* Animated Glow */}
           <div
             className="absolute inset-0 bg-gradient-to-tr from-red-600/40 via-red-500/10 to-transparent transition-opacity duration-200"
             style={{ opacity: isRecording ? glowOpacity : 0.3 }}
           />
 
-          {/* Avatar Face Representation */}
+          {/* Kabir Persona Avatar Representation */}
           <div className="relative flex flex-col items-center justify-center space-y-1">
             <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-red-700 to-red-500 flex items-center justify-center text-white font-black text-2xl shadow-lg border-2 border-white/40">
-              J
+              K
             </div>
             <div className="text-[11px] font-black uppercase tracking-wider text-slate-200">
-              Jay • Avatar
+              Kabir • AI Specialist
             </div>
           </div>
 
@@ -80,7 +80,7 @@ export function VoiceVisualizer({
         {/* Floating Mic Trigger Button */}
         <button
           onClick={onToggleRecording}
-          aria-label="Toggle Gemini Multimodal Stream"
+          aria-label="Toggle Gemini Live Stream"
           className={`absolute -bottom-3 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 focus:outline-none shadow-xl border-2 border-slate-900 ${
             isRecording
               ? "bg-red-600 text-white shadow-red-600/50 hover:scale-110"
@@ -102,12 +102,12 @@ export function VoiceVisualizer({
           <Sparkles className="w-3.5 h-3.5 text-red-500" />
           <span>
             {isRecording
-              ? `Live Multimodal Stream Active (${language} • orus voice)`
+              ? `Live Audio Active (${language} • Gemini 2.5)`
               : `Tap Mic to Start Gemini Live Stream`}
           </span>
         </div>
         <p className="text-[11px] text-slate-400 max-w-sm">
-          Vertex AI real-time audio/video avatar consultation with Kabir showroom persona
+          Vertex AI Gemini 2.5 real-time bidirectional audio consultation with Kabir showroom persona
         </p>
       </div>
     </div>

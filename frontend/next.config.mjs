@@ -2,6 +2,14 @@
 const nextConfig = {
   output: "standalone",
   reactStrictMode: false,
+  experimental: {
+    allowedDevOrigins: [
+      "*.proxy.googlers.com",
+      "*.googlers.com",
+      "localhost:3000",
+      "127.0.0.1:3000"
+    ]
+  },
   images: {
     domains: ["images.unsplash.com", "via.placeholder.com"]
   },

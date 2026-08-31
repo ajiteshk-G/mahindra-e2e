@@ -57,18 +57,20 @@ export function ChatAvatarPanel({
   initialCustomerPhone = "",
   activeVehicleId = "thar_roxx"
 }: ChatAvatarPanelProps) {
-  const [name, setName] = useState(initialCustomerName || "");
-  const [phone, setPhone] = useState(initialCustomerPhone || "");
-  const [nameError, setNameError] = useState("");
-  const [phoneError, setPhoneError] = useState("");
-  const [touched, setTouched] = useState({ name: false, phone: false });
-  const [isVerified, setIsVerified] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(false);
+  const [name, setName] = useState<string>(initialCustomerName || "");
+  const [phone, setPhone] = useState<string>(initialCustomerPhone || "");
+  const [nameError, setNameError] = useState<string>("");
+  const [phoneError, setPhoneError] = useState<string>("");
+  const [touched, setTouched] = useState<{ name: boolean; phone: boolean }>({ name: false, phone: false });
+  const [isVerified, setIsVerified] = useState<boolean>(Boolean(initialCustomerName && initialCustomerPhone));
+  const [showCalendar, setShowCalendar] = useState<boolean>(false);
 
-  // Sync initial props if provided
   useEffect(() => {
-    if (initialCustomerName) setName(initialCustomerName);
-    if (initialCustomerPhone) setPhone(initialCustomerPhone);
+    if (initialCustomerName && initialCustomerPhone) {
+      setName(initialCustomerName);
+      setPhone(initialCustomerPhone);
+      setIsVerified(true);
+    }
   }, [initialCustomerName, initialCustomerPhone]);
 
   // Open calendar widget when customer asks for a test ride/drive or agrees to book
@@ -176,6 +178,9 @@ export function ChatAvatarPanel({
       session_type: "LIVE_CALL",
       vehicle_id: activeVehicleId
     }).catch((err) => console.debug("Identify customer notice:", err));
+
+    // Automatically initiate live voice streaming session
+    onToggleRecording(name.trim(), phone.trim(), activeVehicleId);
   };
 
   const [inputText, setInputText] = useState("");
@@ -325,9 +330,9 @@ export function ChatAvatarPanel({
 
       {/* Pre-Chat Registration Form (Shown when not yet verified) */}
       {!isVerified && messages.length === 0 && !isRecording ? (
-        <div className="flex-1 p-6 flex flex-col justify-between overflow-y-auto bg-gradient-to-b from-[#101726]/95 via-[#0D1322] to-[#0B0F17] animate-in fade-in duration-300">
-          <div className="text-center mb-3">
-            <div className="relative w-14 h-14 mx-auto mb-2.5">
+        <div className="flex-1 px-4 py-3 flex flex-col justify-center overflow-y-auto animate-in fade-in duration-300">
+          <div className="text-center mb-5">
+            <div className="relative w-16 h-16 mx-auto mb-3">
               <div className="w-full h-full rounded-full p-0.5 bg-gradient-to-tr from-red-600 via-red-500 to-cyan-400 shadow-[0_0_25px_rgba(227,24,55,0.45)]">
                 <img
                   src="/avatars/jay.png"

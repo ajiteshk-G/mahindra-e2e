@@ -75,7 +75,7 @@ The demo is divided into **3 distinct parts**:
 | `ENABLE_SMS_DISPATCH` | Enables SMS dispatch for booking notifications and call follow-ups | `true` |
 | `PROJECT_ID` / `VERTEX_PROJECT_ID` | GCP Project ID with Vertex AI APIs enabled | `mb-poc-352009` |
 | `LOCATION` / `VERTEX_LOCATION` | GCP Region for Vertex AI | `us-central1` |
-| `GEMINI_LIVE_MODEL` | Model for bidirectional live audio avatar session | `gemini-3.1-flash-live-preview-04-2026` |
+| `GEMINI_LIVE_MODEL` | Model for bidirectional live native audio session | `gemini-3.1-flash-live-preview` |
 | `REST_CHAT_MODEL` | Model for text/JSON intelligence generation | `gemini-2.5-flash` |
 | `DATABASE_URL` | SQLite or PostgreSQL database connection string | `sqlite+aiosqlite:///./mahindra_omnichannel.db` |
 | `PORT` | Container HTTP port | `8080` (Cloud Run) / `8000` (Local) |

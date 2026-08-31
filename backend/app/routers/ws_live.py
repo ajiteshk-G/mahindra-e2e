@@ -20,6 +20,7 @@ from app.services.customer_service import CustomerService
 from app.models.customer import Customer
 
 logger = logging.getLogger("ws_live")
+logger.setLevel(logging.INFO)
 router = APIRouter(tags=["Live Audio & Multimodal Chat"])
 
 KAVYA_OUTBOUND_PROMPT = """You are Kavya, the official Proactive Post-Test Drive Experience Specialist for Mahindra & Mahindra.
@@ -232,10 +233,10 @@ async def live_audio_websocket(websocket: WebSocket):
                     lead_ref=lead_ref
                 ) if is_outbound else KABIR_SYSTEM_PROMPT
 
-                active_voice = "Aoede" if is_outbound else (settings.AVATAR_VOICE or "orus")
-                active_modality = "AUDIO" if is_outbound else (settings.AVATAR_MODALITY or "VIDEO")
+                active_voice = "Aoede" if is_outbound else (settings.AVATAR_VOICE or "Puck")
+                active_modality = "AUDIO"
 
-                # Talk to Kabir uses Gemini Live Avatar (Jay); Outbound call uses Plain Gemini Live (Aoede)
+                # Talk to Kabir uses Gemini 2.5 Native Live Audio; Outbound call uses Gemini Live Audio
                 tools_config = [
                     {
                         "functionDeclarations": [
@@ -263,8 +264,8 @@ async def live_audio_websocket(websocket: WebSocket):
                                     "type": "object",
                                     "properties": {
                                         "car_name": {
-                                            "type": "string",
-                                            "description": "The normalized ID: thar_roxx, scorpio_n, xuv700, be_6e, xev_9e, xuv_3xo, thar_3door, scorpio_classic, bolero_neo, bolero_neo_plus, bolero, xuv400_ev, marazzo"
+                                             "type": "string",
+                                             "description": "The normalized ID: thar_roxx, scorpio_n, xuv700, be_6e, xev_9e, xuv_3xo, thar_3door, scorpio_classic, bolero_neo, bolero_neo_plus, bolero, xuv400_ev, marazzo"
                                         }
                                     },
                                     "required": ["car_name"]
@@ -350,8 +351,8 @@ async def live_audio_websocket(websocket: WebSocket):
                         "parts": [{"text": active_system_prompt}]
                     }
                 }
-                if not is_outbound:
-                    setup_dict["avatarConfig"] = {"avatarName": settings.AVATAR_NAME or "Jay"}
+                if settings.AVATAR_MODALITY == "VIDEO" and not is_outbound:
+                    setup_dict["avatarConfig"] = {"avatarName": settings.AVATAR_NAME or "Kabir"}
 
                 setup_msg = {
                     "setup": setup_dict
@@ -361,6 +362,8 @@ async def live_audio_websocket(websocket: WebSocket):
                 # Wait for Vertex setup confirmation
                 try:
                     init_resp = await asyncio.wait_for(bidi_ws.recv(), timeout=4.0)
+                    if isinstance(init_resp, bytes):
+                        init_resp = init_resp.decode("utf-8")
                     init_data = json.loads(init_resp) if isinstance(init_resp, str) else {}
                     logger.info(f"Vertex Bidi setup complete: {init_data.get('setupComplete', True)}")
                     
@@ -384,19 +387,28 @@ async def live_audio_websocket(websocket: WebSocket):
                 # Task: Client -> Vertex Bidi
                 async def client_to_bidi():
                     try:
+                        print(f"[{session_id}] client_to_bidi task started", flush=True)
                         while True:
                             data = await websocket.receive()
                             if data.get("type") == "websocket.disconnect":
+                                print(f"[{session_id}] Client WebSocket disconnected", flush=True)
                                 break
                             if "text" in data and data["text"]:
                                 payload = json.loads(data["text"])
+                                print(f"[{session_id}] Received text payload: {payload.get('type')}", flush=True)
                                 if "realtimeInput" in payload or "clientContent" in payload or "toolResponse" in payload:
                                     await bidi_ws.send(data["text"])
                                 else:
                                     msg_type = payload.get("type", "USER_CHAT")
                                     if msg_type == "END_CALL" or msg_type == "STOP_SESSION":
-                                        logger.info(f"Client requested end of call for session {session_id}")
+                                        print(f"[{session_id}] Client requested end of call", flush=True)
                                         break
+                                    elif msg_type == "AUDIO_STREAM_END":
+                                        await bidi_ws.send(json.dumps({
+                                            "realtimeInput": {
+                                                "audioStreamEnd": True
+                                            }
+                                        }))
                                     elif msg_type == "START_SESSION":
                                         cust_name = payload.get("customer_name") or customer.name or "there"
                                         greeting_turn = {
@@ -410,11 +422,12 @@ async def live_audio_websocket(websocket: WebSocket):
                                                 "turnComplete": True
                                             }
                                         }
+                                        print(f"[{session_id}] Sending START_SESSION greeting turn to Vertex Bidi", flush=True)
                                         await bidi_ws.send(json.dumps(greeting_turn))
                                     elif msg_type == "USER_CHAT":
                                         user_text = payload.get("text", "")
                                         if user_text:
-                                            # Send turn immediately to Gemini Live without blocking on DB
+                                            # Send turn to Vertex AI Bidi WebSocket immediately (zero-latency)
                                             bidi_turn = {
                                                 "clientContent": {
                                                     "turns": [
@@ -426,6 +439,7 @@ async def live_audio_websocket(websocket: WebSocket):
                                                     "turnComplete": True
                                                 }
                                             }
+                                            print(f"[{session_id}] Sending USER_CHAT turn to Vertex Bidi", flush=True)
                                             await bidi_ws.send(json.dumps(bidi_turn))
 
                                             # Asynchronous background persistence
@@ -454,6 +468,11 @@ async def live_audio_websocket(websocket: WebSocket):
                                                     logger.debug(f"User interaction log notice: {err}")
 
                                             asyncio.create_task(_async_log_user_turn(user_text))
+=======
+                                                except Exception:
+                                                    pass
+                                            asyncio.create_task(_bg_log_turn(user_text))
+>>>>>>> 1177b3c (refactor: update Gemini live audio integration with Kabir persona, auto-initiation, and connection settings)
                             elif "bytes" in data and data["bytes"]:
                                 import base64
                                 pcm_b64 = base64.b64encode(data["bytes"]).decode("utf-8")
@@ -469,18 +488,25 @@ async def live_audio_websocket(websocket: WebSocket):
                                 }
                                 await bidi_ws.send(json.dumps(realtime_input))
                     except Exception as e:
-                        logger.debug(f"Client to Bidi finished: {e}")
+                        print(f"[{session_id}] Error in client_to_bidi: {e}", flush=True)
 
                 # Task: Vertex Bidi -> Client
                 async def bidi_to_client():
                     try:
+                        print(f"[{session_id}] bidi_to_client task started", flush=True)
                         while True:
                             msg = await bidi_ws.recv()
+                            if isinstance(msg, bytes):
+                                msg = msg.decode("utf-8")
                             try:
                                 bidi_data = json.loads(msg)
                                 server_content = bidi_data.get("serverContent") or {}
                                 model_turn = server_content.get("modelTurn") or {}
                                 parts = model_turn.get("parts") or []
+                                print(f"[{session_id}] Bidi sent keys: {list(bidi_data.keys())}, parts: {len(parts)}", flush=True)
+                                # Check for barge-in interruption per gemini-live-api-dev skill
+                                if server_content.get("interrupted") is True:
+                                    await websocket.send_text(json.dumps({"type": "INTERRUPTED"}))
 
                                 # 1. Check for Gemini Live Tool Calls (e.g. switch_vehicle_showroom)
                                 tool_call_obj = bidi_data.get("toolCall") or server_content.get("toolCall")
@@ -488,7 +514,7 @@ async def live_audio_websocket(websocket: WebSocket):
                                     function_calls = tool_call_obj.get("functionCalls", [])
                                     for fc in function_calls:
                                         fc_name = fc.get("name")
-                                        call_id = fc.get("id")
+                                        call_id = fc.get("id") or "call_0"
                                         fc_args = fc.get("args", {})
                                         logger.info(f"Gemini Live Tool Call: {fc_name} {fc_args}")
 
@@ -497,24 +523,13 @@ async def live_audio_websocket(websocket: WebSocket):
                                             "toolResponse": {
                                                 "functionResponses": [
                                                     {
-                                                        "response": {"output": {"status": "success", "executed": fc_name}},
+                                                        "response": {"output": {"status": "success", "executed": fc_name, "info": f"Switched showroom to {fc_args.get('car_name', 'selected model')}"}},
                                                         "id": call_id
                                                     }
                                                 ]
                                             }
                                         }
                                         await bidi_ws.send(json.dumps(tool_resp))
-
-                                        # Persist checklist if tool is update_advisor_checklist
-                                        if fc_name == "update_advisor_checklist":
-                                            items = fc_args.get("checklist_items", [])
-                                            veh = fc_args.get("vehicle_id", session_mgr.active_vehicle_id)
-                                            if items:
-                                                async with AsyncSessionLocal() as db:
-                                                    from app.services.checklist_service import ChecklistService
-                                                    await ChecklistService.update_customer_and_booking_checklist(
-                                                        db, customer_id_str=customer.customer_id, vehicle_id=veh, new_items=items
-                                                    )
 
                                         # Emit UI action to client
                                         await websocket.send_text(json.dumps({
@@ -523,23 +538,25 @@ async def live_audio_websocket(websocket: WebSocket):
                                             "tool_args": fc_args
                                         }))
 
-                                # 2. Check for speech transcriptions from Gemini Live
-                                out_trans = server_content.get("outputTranscription")
+                                # 2. Process Live Speech-to-Text & Spoken Assistant Transcriptions
+                                out_trans = server_content.get("outputAudioTranscription") or server_content.get("outputTranscription")
                                 if out_trans and out_trans.get("text"):
                                     await websocket.send_text(json.dumps({
                                         "type": "ASSISTANT_RESPONSE",
                                         "speaker": "mia",
                                         "message": out_trans["text"],
+                                        "is_delta": True,
                                         "language": session_mgr.language
                                     }))
 
-                                in_trans = server_content.get("inputTranscription")
+                                in_trans = server_content.get("inputAudioTranscription") or server_content.get("inputTranscription")
                                 if in_trans and in_trans.get("text"):
                                     speech_txt = in_trans["text"]
                                     await websocket.send_text(json.dumps({
                                         "type": "USER_TRANSCRIPTION",
                                         "speaker": "customer",
-                                        "message": speech_txt
+                                        "message": speech_txt,
+                                        "is_delta": True
                                     }))
 
                                     async def _async_log_speech(txt: str):
@@ -568,13 +585,29 @@ async def live_audio_websocket(websocket: WebSocket):
 
                                     asyncio.create_task(_async_log_speech(speech_txt))
 
-                                # 3. Process Video, Audio, and Text parts
+                                # 3. Process Video, Audio, FunctionCall, and Text parts
                                 for part in parts:
                                     # Function calls inside model_turn parts
                                     if "functionCall" in part:
                                         fc = part["functionCall"]
                                         fc_name = fc.get("name")
+                                        call_id = fc.get("id") or "call_0"
                                         fc_args = fc.get("args", {})
+                                        logger.info(f"Gemini Live Part FunctionCall: {fc_name} {fc_args}")
+
+                                        # Respond back immediately so Gemini Live audio generation proceeds
+                                        tool_resp = {
+                                            "toolResponse": {
+                                                "functionResponses": [
+                                                    {
+                                                        "response": {"output": {"status": "success", "executed": fc_name, "info": f"Switched showroom to {fc_args.get('car_name', 'selected model')}"}},
+                                                        "id": call_id
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                        await bidi_ws.send(json.dumps(tool_resp))
+
                                         await websocket.send_text(json.dumps({
                                             "type": "UI_ACTION",
                                             "tool_name": fc_name,
@@ -606,12 +639,19 @@ async def live_audio_websocket(websocket: WebSocket):
                             except Exception as e:
                                 logger.debug(f"Error parsing bidi message: {e}")
                     except Exception as e:
-                        logger.debug(f"Bidi to client finished: {e}")
+                        logger.info(f"Bidi to client loop ended: {e}")
 
+                t1 = asyncio.create_task(client_to_bidi())
+                t2 = asyncio.create_task(bidi_to_client())
                 done, pending = await asyncio.wait(
-                    [asyncio.create_task(client_to_bidi()), asyncio.create_task(bidi_to_client())],
+                    [t1, t2],
                     return_when=asyncio.FIRST_COMPLETED
                 )
+                for t in done:
+                    if t.exception():
+                        logger.error(f"Live task failed with exception: {t.exception()}")
+                    else:
+                        logger.info(f"Live task completed normally: {t}")
                 for task in pending:
                     task.cancel()
                 return

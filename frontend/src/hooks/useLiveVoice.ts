@@ -125,6 +125,9 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
           } else if (payload.type === "AUDIO_CHUNK" && payload.audio_b64) {
             audioOutputManagerRef.current?.playAudioChunk(payload.audio_b64);
             setRmsLevel(0.35 + Math.random() * 0.45);
+          } else if (payload.type === "INTERRUPTED") {
+            audioOutputManagerRef.current?.interrupt();
+            setRmsLevel(0);
           } else if (payload.type === "SESSION_INIT" || payload.type === "SESSION_INITIALIZED") {
             if (payload.session_id) sessionIdRef.current = payload.session_id;
           } else if (payload.type === "USER_TRANSCRIPTION" && payload.message) {
@@ -261,6 +264,7 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
     if (!text.trim()) return;
 
     if (audioOutputManagerRef.current) {
+      await audioOutputManagerRef.current.initializeAudioContext();
       audioOutputManagerRef.current.interrupt();
     }
 
@@ -494,6 +498,7 @@ export function useLiveVoice(onUiEvent?: (event: any) => void) {
     if (socketRef.current) {
       try {
         if (socketRef.current.readyState === WebSocket.OPEN) {
+          socketRef.current.send(JSON.stringify({ type: "AUDIO_STREAM_END" }));
           socketRef.current.send(JSON.stringify({ type: "END_CALL" }));
         }
         socketRef.current.close();

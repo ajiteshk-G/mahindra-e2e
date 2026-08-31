@@ -35,18 +35,18 @@ export function AvatarVideoPlayer({ isRecording, rmsLevel, isSpeaking }: AvatarV
 
   return (
     <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-2xl bg-[#020408]">
-      {/* HTML5 Live Video Element for Gemini Live Avatar Video Stream */}
+      {/* HTML5 Live Video Element (only rendered when video stream exists) */}
       <video
         id="video_player"
         autoPlay
         playsInline
         muted={false}
         className={`w-full h-full object-cover rounded-2xl z-10 transition-opacity duration-300 ${
-          hasVideoStream ? "opacity-100" : "opacity-0"
+          hasVideoStream ? "opacity-100 block" : "opacity-0 pointer-events-none hidden"
         }`}
       />
 
-      {/* Standby / Placeholder Overlay when video stream is connecting or in standby */}
+      {/* Standby / Active Audio Stage with Ambient Ripple */}
       <div
         className={`absolute inset-0 z-0 bg-gradient-to-b from-[#0F172A] to-[#060912] flex flex-col items-center justify-center p-4 transition-opacity duration-300 ${
           hasVideoStream ? "opacity-0 pointer-events-none" : "opacity-100"
@@ -96,7 +96,7 @@ export function AvatarVideoPlayer({ isRecording, rmsLevel, isSpeaking }: AvatarV
         </div>
       </div>
 
-      {/* Top-Left Live Video HUD Badge */}
+      {/* Top-Left Live Audio HUD Badge */}
       <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 bg-black/80 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/10 text-[9.5px] font-bold text-white shadow-md">
         <span
           className={`w-2 h-2 rounded-full ${
@@ -115,7 +115,7 @@ export function AvatarVideoPlayer({ isRecording, rmsLevel, isSpeaking }: AvatarV
       {/* Top-Right Modality Badge */}
       <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10 text-[8.5px] font-mono text-cyan-300 shadow-md">
         <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
-        <span>GEMINI LIVE</span>
+        <span>GEMINI LIVE 2.5</span>
       </div>
     </div>
   );

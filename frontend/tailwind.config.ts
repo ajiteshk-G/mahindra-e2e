@@ -20,6 +20,12 @@ const config: Config = {
           electricBg: "#0B2230"
         }
       },
+      boxShadow: {
+        xs: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+      },
+      scale: {
+        '102': '1.02',
+      },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'glow': 'glow 2s ease-in-out infinite alternate',
